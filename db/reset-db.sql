@@ -1,6 +1,7 @@
 DROP TABLE IF EXISTS images;
 DROP TABLE IF EXISTS shoots;
 DROP TABLE IF EXISTS persons;
+DROP TABLE IF EXISTS preprocessed_images;
 
 PRAGMA foreign_keys = ON;
 
@@ -36,4 +37,17 @@ croppedUrl TEXT,
 created_at DATETIME DEFAULT (datetime('now')),
 updated_at DATETIME DEFAULT (datetime('now')),
 FOREIGN KEY (shootId) REFERENCES shoots(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS preprocessed_images (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+shootId INTEGER NOT NULL,
+imageId INTEGER NOT NULL,
+beforeFileName TEXT NOT NULL,
+afterFileName TEXT NOT NULL,
+preprocessedUrl TEXT NOT NULL,
+created_at DATETIME DEFAULT (datetime('now')),
+updated_at DATETIME DEFAULT (datetime('now')),
+FOREIGN KEY (shootId) REFERENCES shoots(id) ON DELETE CASCADE,
+FOREIGN KEY (imageId) REFERENCES images(id) ON DELETE CASCADE
 );

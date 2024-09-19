@@ -1,21 +1,10 @@
-import React from 'react';
-import { UploadAndCrop } from '../../components/upload-and-crop';
-import { getExistingShoots } from '@/actions/shoot-actions';
+import { UploadAndCrop } from '@/components/upload-and-crop';
 
-export default async function UploadAndCropPage() {
-  const existingShoots = await getExistingShoots();
-
+export default function UploadAndCropPage() {
   return (
     <div>
-      <h1>Upload and Crop</h1>
-      {/* Render existing shoots and form fields */}
-      {existingShoots.map((shoot) => (
-        <div key={shoot.id}>
-          <p>Shoot Name: {shoot.name}</p>
-          {/* Add more shoot details as needed */}
-        </div>
-      ))}
-      {/* Add your upload and crop form here */}
+      <h1 className="text-3xl font-bold mb-8">Upload and Crop</h1>
+      <UploadAndCrop />
     </div>
   );
 }
