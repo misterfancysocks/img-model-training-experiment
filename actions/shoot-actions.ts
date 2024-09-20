@@ -10,6 +10,7 @@ import { getExistingShoots as dbGetExistingShoots } from '@/db/queries/shoot-que
 import path from 'path';
 import fs from 'fs/promises';
 import { saveImage } from '@/utils/image-utils';
+import { savePreprocessedImage } from '../db/queries/shoot-queries';
 
 /**
  * Retrieves the latest shoot from the database.
@@ -111,20 +112,26 @@ export async function saveShootAction(person: PersonData, shoot: ShootData, imag
     const shootId = shootResult.id;
 
     const savedImagePaths = await Promise.all(images.map(async (img) => {
-      if (!img.path) {
-        console.error(`Missing path for file: ${img.fileName}`);
-        return null;
-      }
-
       console.log(`Processing image: ${img.fileName}`);
 
-      const originalFileName = `o_${img.fileName}`;
-      const originalUrl = await saveImage(img.path, shootId, originalFileName);
+      let originalUrl: string;
+      let croppedUrl: string | undefined;
 
-      let croppedUrl: string | undefined = undefined;
-      if (img.croppedPath) {
-        const croppedFileName = `c_${img.fileName}`;
-        croppedUrl = await saveImage(img.croppedPath, shootId, croppedFileName);
+      if (img.path) {
+        // Handle file path (existing functionality)
+        originalUrl = await saveImage(img.path, shootId, `o_${img.fileName}`);
+        if (img.croppedPath) {
+          croppedUrl = await saveImage(img.croppedPath, shootId, `c_${img.fileName}`);
+        }
+      } else if (img.originalImg) {
+        // Handle base64 data (new functionality)
+        originalUrl = await saveBase64Image(img.originalImg, shootId, `o_${img.fileName}`);
+        if (img.croppedImg) {
+          croppedUrl = await saveBase64Image(img.croppedImg, shootId, `c_${img.fileName}`);
+        }
+      } else {
+        console.error(`Invalid image data for file: ${img.fileName}`);
+        return null;
       }
 
       console.log(`Saved image: ${img.fileName}, Original URL: ${originalUrl}, Cropped URL: ${croppedUrl}`);
@@ -148,6 +155,20 @@ export async function saveShootAction(person: PersonData, shoot: ShootData, imag
     console.error('Error in saveShootAction:', error);
     return { status: 'error', message: 'Failed to save shoot: ' + (error as Error).message };
   }
+}
+
+async function saveBase64Image(base64Data: string, shootId: number, fileName: string): Promise<string> {
+  const publicDir = path.join(process.cwd(), 'public');
+  const shootDir = path.join(publicDir, 'assets', shootId.toString());
+  await fs.mkdir(shootDir, { recursive: true });
+
+  const filePath = path.join(shootDir, fileName);
+  const fileData = base64Data.replace(/^data:image\/\w+;base64,/, '');
+  const buffer = Buffer.from(fileData, 'base64');
+
+  await fs.writeFile(filePath, buffer);
+
+  return `/assets/${shootId}/${fileName}`;
 }
 
 /**
@@ -179,5 +200,105 @@ export async function getShootDetails(shootId: number): Promise<ActionState> {
   } catch (error) {
     console.error('Error in getShootDetails:', error);
     return { status: 'error', message: 'Failed to retrieve shoot details' };
+  }
+}
+
+export async function saveShootActionBase64(person: PersonData, shoot: ShootData, images: any[]): Promise<ActionState> {
+  try {
+    console.log('Saving shoot with base64 images:', images.length);
+
+    const shootResult = await saveShootToDb(person, shoot);
+    if (!shootResult || typeof shootResult.id !== 'number') {
+      throw new Error('Failed to save shoot or get valid shoot ID');
+    }
+    const shootId = shootResult.id;
+
+    const savedImagePaths = await Promise.all(images.map(async (img) => {
+      console.log(`Processing image: ${img.fileName}`);
+
+      const originalUrl = await saveBase64Image(img.originalImg, shootId, `o_${img.fileName}`);
+      let croppedUrl: string | undefined;
+      if (img.croppedImg) {
+        croppedUrl = await saveBase64Image(img.croppedImg, shootId, `c_${img.fileName}`);
+      }
+
+      console.log(`Saved image: ${img.fileName}, Original URL: ${originalUrl}, Cropped URL: ${croppedUrl}`);
+
+      return {
+        fileName: img.fileName,
+        originalUrl,
+        croppedUrl,
+      };
+    }));
+
+    const updatedShootResult = await updateShootWithImages(shootId, savedImagePaths);
+
+    console.log('Shoot saved successfully:', updatedShootResult);
+    return { status: 'success', message: 'Shoot saved successfully', data: updatedShootResult };
+  } catch (error) {
+    console.error('Error in saveShootActionBase64:', error);
+    return { status: 'error', message: 'Failed to save shoot: ' + (error as Error).message };
+  }
+}
+
+export async function saveShootActionFilePath(person: PersonData, shoot: ShootData, images: any[]): Promise<ActionState> {
+  try {
+    console.log('Saving shoot with file path images:', images.length);
+
+    const shootResult = await saveShootToDb(person, shoot);
+    if (!shootResult || typeof shootResult.id !== 'number') {
+      throw new Error('Failed to save shoot or get valid shoot ID');
+    }
+    const shootId = shootResult.id;
+
+    const savedImagePaths = await Promise.all(images.map(async (img) => {
+      console.log(`Processing image: ${img.fileName}`);
+
+      const originalUrl = await saveImage(img.path, shootId, `o_${img.fileName}`);
+      let croppedUrl: string | undefined;
+      if (img.croppedPath) {
+        croppedUrl = await saveImage(img.croppedPath, shootId, `c_${img.fileName}`);
+      }
+
+      console.log(`Saved image: ${img.fileName}, Original URL: ${originalUrl}, Cropped URL: ${croppedUrl}`);
+
+      return {
+        fileName: img.fileName,
+        originalUrl,
+        croppedUrl,
+      };
+    }));
+
+    const updatedShootResult = await updateShootWithImages(shootId, savedImagePaths);
+
+    console.log('Shoot saved successfully:', updatedShootResult);
+    return { status: 'success', message: 'Shoot saved successfully', data: updatedShootResult };
+  } catch (error) {
+    console.error('Error in saveShootActionFilePath:', error);
+    return { status: 'error', message: 'Failed to save shoot: ' + (error as Error).message };
+  }
+}
+
+// Add this new function
+export async function savePreprocessedImageAction(
+  shootId: number,
+  imageId: number,
+  beforeFileName: string,
+  afterFileName: string,
+  preprocessedUrl: string
+): Promise<ActionState> {
+  try {
+    const result = await savePreprocessedImage(shootId, imageId, beforeFileName, afterFileName, preprocessedUrl);
+    return { 
+      status: 'success', 
+      message: 'Preprocessed image saved successfully', 
+      data: result 
+    };
+  } catch (error) {
+    console.error('Error in savePreprocessedImageAction:', error);
+    return { 
+      status: 'error', 
+      message: 'Failed to save preprocessed image: ' + (error as Error).message 
+    };
   }
 }

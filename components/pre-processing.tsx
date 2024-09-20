@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
 import { Loader2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
+import path from 'path';
 
 type Shoot = {
   id: number;
@@ -162,12 +163,46 @@ const PreProcessing = () => {
   };
 
   const handleSave = async () => {
-    console.log('Saving preprocessed images...');
-    // TODO: Implement the save functionality here
-    toast({
-      title: "Success",
-      description: "Preprocessed images have been saved.",
-    });
+    if (!selectedShoot) return;
+
+    try {
+      const preprocessedImages = images.filter(img => img.noBackgroundUrl);
+      
+      for (const img of preprocessedImages) {
+        const beforeFileName = img.croppedUrl ? path.basename(img.croppedUrl) : path.basename(img.originalUrl);
+        const afterFileName = path.basename(img.noBackgroundUrl as string);
+        
+        const response = await fetch('/api/save-preprocessed-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            shootId: selectedShoot,
+            imageId: img.id,
+            beforeFileName,
+            afterFileName,
+            preprocessedUrl: img.noBackgroundUrl,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to save preprocessed image: ${img.fileName}`);
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: `${preprocessedImages.length} preprocessed images have been saved.`,
+      });
+    } catch (error) {
+      console.error('Error saving preprocessed images:', error);
+      toast({
+        title: "Error",
+        description: `Failed to save preprocessed images: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive",
+      });
+    }
   };
 
   return (

@@ -1,3 +1,4 @@
+```mermaid
 sequenceDiagram
     participant Client as Client (UploadAndCrop Component)
     participant API as API Routes
@@ -21,7 +22,9 @@ sequenceDiagram
         API-->>Client: Return shoot data
         Client->>Client: Update personData state
         Client->>Client: Update shootData state
-        Client->>Client: Update images state
+        loop For each image
+            Client->>Client: Convert image URL to base64
+        end
+        Client->>Client: Update images state with base64 data
     end
-
     Note over Client: Display loaded data in form and image grid

@@ -177,3 +177,22 @@ export async function deleteImage(shootId: number, imageUrl: string) {
     await db.close();
   }
 }
+
+export async function savePreprocessedImage(
+  shootId: number,
+  imageId: number,
+  beforeFileName: string,
+  afterFileName: string,
+  preprocessedUrl: string
+): Promise<any> {
+  const db = await openDb();
+  try {
+    const result = await db.run(`
+      INSERT INTO preprocessed_images (shootId, imageId, beforeFileName, afterFileName, preprocessedUrl)
+      VALUES (?, ?, ?, ?, ?)
+    `, [shootId, imageId, beforeFileName, afterFileName, preprocessedUrl]);
+    return result;
+  } finally {
+    await db.close();
+  }
+}

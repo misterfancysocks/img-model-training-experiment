@@ -204,7 +204,7 @@ export function UploadAndCrop(): JSX.Element {
       }));
 
       // Determine the endpoint based on whether it's a new shoot or an update
-      const endpoint = selectedShootId === 'new' ? '/api/save-shoot' : `/api/update-shoot/${selectedShootId}`;
+      const endpoint = selectedShootId === 'new' ? '/api/save-shoot-base64' : `/api/update-shoot/${selectedShootId}`;
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -293,11 +293,22 @@ export function UploadAndCrop(): JSX.Element {
         const data = await response.json();
         setPersonData(data.person);
         setShootData(data.shoot);
-        setImages(data.images.map((img: any) => ({
-          original: img.originalUrl,
-          cropped: img.croppedUrl,
-          fileName: img.fileName
-        })));
+
+        // Convert image URLs to base64
+        const convertedImages = await Promise.all(data.images.map(async (img: any) => {
+          const originalBase64 = await fetchImageAsBase64(img.originalUrl);
+          let croppedBase64;
+          if (img.croppedUrl) {
+            croppedBase64 = await fetchImageAsBase64(img.croppedUrl);
+          }
+          return {
+            fileName: img.fileName,
+            original: originalBase64,
+            cropped: croppedBase64,
+          };
+        }));
+
+        setImages(convertedImages);
       } catch (error) {
         console.error('Error fetching shoot details:', error);
         setShootError('An error occurred while fetching shoot details');
