@@ -55,7 +55,21 @@ const PreProcessing = () => {
       const response = await fetch(`/api/get-shoot-details?id=${shootId}`);
       if (!response.ok) throw new Error('Failed to fetch shoot details');
       const data = await response.json();
-      setImages(data.images);
+      
+      // Check for preprocessed images
+      const updatedImages = await Promise.all(data.images.map(async (image: ImageData) => {
+        const baseFileName = path.basename(image.croppedUrl || image.originalUrl);
+        const preprocessedPath = `/assets/bg-removed/${shootId}/nobg_${baseFileName}`;
+        const preprocessedExists = await checkImageExists(preprocessedPath);
+        
+        if (preprocessedExists) {
+          return { ...image, noBackgroundUrl: preprocessedPath };
+        }
+        
+        return image;
+      }));
+      
+      setImages(updatedImages);
     } catch (error) {
       console.error('Error fetching shoot details:', error);
       toast({
@@ -65,6 +79,15 @@ const PreProcessing = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const checkImageExists = async (imagePath: string): Promise<boolean> => {
+    try {
+      const response = await fetch(imagePath, { method: 'HEAD' });
+      return response.ok;
+    } catch {
+      return false;
     }
   };
 
@@ -205,6 +228,11 @@ const PreProcessing = () => {
     }
   };
 
+  const getImageUrl = (image: ImageData) => {
+    if (image.noBackgroundUrl) return image.noBackgroundUrl;
+    return image.croppedUrl || image.originalUrl;
+  };
+
   return (
     <div className="flex h-screen">
       <div className="w-1/4 p-4 border-r">
@@ -235,7 +263,7 @@ const PreProcessing = () => {
                   <DialogTrigger asChild>
                     <div className="relative aspect-square cursor-pointer">
                       <Image
-                        src={image.noBackgroundUrl || image.croppedUrl || image.originalUrl}
+                        src={getImageUrl(image)}
                         alt={image.fileName}
                         layout="fill"
                         objectFit="cover"
@@ -251,7 +279,7 @@ const PreProcessing = () => {
                   <DialogContent className="max-w-3xl">
                     <div className="relative w-full" style={{ paddingBottom: '75%' }}>
                       <Image
-                        src={image.noBackgroundUrl || image.originalUrl}
+                        src={getImageUrl(image)}
                         alt={image.fileName}
                         layout="fill"
                         objectFit="contain"

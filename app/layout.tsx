@@ -3,6 +3,8 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Providers } from "@/components/utilities/providers";
+import { Inter } from 'next/font/google';
+import Header from '@/components/header';
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -14,6 +16,8 @@ const geistMono = localFont({
   variable: "--font-geist-mono",
   weight: "100 900",
 });
+
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: "Costumes App",
@@ -27,9 +31,9 @@ interface RootLayoutProps {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body>
-        {children}
-        <Toaster />
+      <body className={inter.className}>
+        <Header />
+        <main className="container mx-auto mt-8">{children}</main>
       </body>
     </html>
   );

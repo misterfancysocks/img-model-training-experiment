@@ -27,4 +27,4 @@ sequenceDiagram
         end
         Client->>Client: Update images state with base64 data
     end
-    Note over Client: Display loaded data in form and image grid
+```

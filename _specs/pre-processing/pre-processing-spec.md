@@ -6,6 +6,12 @@ This component builds upon the [upload-and-crop](../components/upload-and-crop.t
 - A menu on the left side allows the user to select a shoot.
 - Images are loaded on the right side in a grid layout.
 - If a cropped image exists (prefix of 'c_' in the filename), it will be displayed; otherwise, the original (prefix of 'o_') will be shown.
+- If a preprocessed image exists (prefix of 'nobg_' in the filename), it will be displayed; otherwise, the original (prefix of 'o_') will be shown.
+
+Hierarchy to check for photos (in order):
+1. preprocessed / 'nobg_'
+2. cropped /'c_'
+3. original /'o_'
 
 ## Background Removal Functionality
 1. A 'Remove Background' button is present at the bottom of the page.

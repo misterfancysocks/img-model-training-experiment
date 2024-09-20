@@ -40,8 +40,8 @@ The order of the buttons should be:
     - The modal should fit the entire image without scrolling.
    - The user should be able to select an area to crop.
    - Once the user is finished cropping, they can can:
-    - select 'Crop' to save the cropped image.
-    - select 'Cancel' to discard the cropped image.
+       - select 'Crop' to save the cropped image.
+       - select 'Cancel' to discard the cropped image.
    - After cropping, both the original and cropped versions should be saved.
 
 
