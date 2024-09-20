@@ -3,7 +3,6 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Providers } from "@/components/utilities/providers";
-import { openDb } from '@/db/db';
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -21,26 +20,16 @@ export const metadata: Metadata = {
   description: "Generate images of you in costumes",
 };
 
-export default async function RootLayout({
-  children,
-}: Readonly<{
+interface RootLayoutProps {
   children: React.ReactNode;
-}>) {
-  await openDb(); // Ensure DB is initialized
+}
 
+export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <Providers
-          attribute="class"
-          defaultTheme="dark"
-          disableTransitionOnChange
-        >
-          {children}
-          <Toaster />
-        </Providers>
+      <body>
+        {children}
+        <Toaster />
       </body>
     </html>
   );

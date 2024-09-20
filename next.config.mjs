@@ -13,7 +13,7 @@ const nextConfig = {
     return config;
   },
   images: {
-    domains: ['localhost'], // Add other domains if needed
+    domains: ['localhost','replicate.delivery'], // Add other domains if needed
   },
   // Remove the rewrites configuration
 };
