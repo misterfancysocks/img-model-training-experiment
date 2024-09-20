@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as fal from "@fal-ai/serverless-client";
 import Replicate from "replicate";
+import fs from 'fs/promises';
+import path from 'path';
 
 // Initialize Replicate client
 const replicate = new Replicate({
@@ -9,35 +11,38 @@ const replicate = new Replicate({
 
 export async function POST(req: NextRequest) {
   try {
-    const { imageBase64, fileName, provider = 'replicate' } = await req.json();
+    const { images, shootId, provider = 'replicate' } = await req.json();
 
-    if (!imageBase64) {
-      return NextResponse.json({ error: 'No image data provided' }, { status: 400 });
+    if (!images || !Array.isArray(images) || images.length === 0 || !shootId) {
+      return NextResponse.json({ error: 'No images or shoot ID provided' }, { status: 400 });
     }
 
-    let result;
-    if (provider === 'fal') {
-      result = await handleFalRemoveBackground(imageBase64, fileName);
-    } else {
-      result = await handleReplicateRemoveBackground(imageBase64);
-    }
+    const processImage = async (image: { imageBase64: string; imageUrl: string }) => {
+      if (provider === 'fal') {
+        return handleFalRemoveBackground(image.imageBase64, image.imageUrl, shootId);
+      } else {
+        return handleReplicateRemoveBackground(image.imageBase64, image.imageUrl, shootId);
+      }
+    };
 
-    return NextResponse.json(result);
+    const outputUrls = await Promise.all(images.map(processImage));
+
+    return NextResponse.json({ outputUrls });
   } catch (error) {
     console.error('\x1b[36m /remove-background error:\x1b[0m', error);
-    return NextResponse.json({ error: 'Failed to process the image' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to process the images' }, { status: 500 });
   }
 }
 
-async function handleFalRemoveBackground(imageBase64: string, fileName: string) {
+async function handleFalRemoveBackground(imageBase64: string, imageUrl: string, shootId: string) {
   const buffer = Buffer.from(imageBase64, 'base64');
-  const file = new File([buffer], fileName, { type: 'image/png' });
+  const file = new File([buffer], path.basename(imageUrl), { type: 'image/png' });
 
-  const imageUrl = await fal.storage.upload(file);
+  const uploadedImageUrl = await fal.storage.upload(file);
 
   const result = await fal.subscribe("fal-ai/imageutils/rembg", {
     input: {
-      image_url: imageUrl,
+      image_url: uploadedImageUrl,
       sync_mode: true,
     },
     logs: true,
@@ -49,18 +54,15 @@ async function handleFalRemoveBackground(imageBase64: string, fileName: string) 
     },
   });
 
-  console.log('\x1b[36m /remove-background fal.ai result:\x1b[0m');
-  console.log(result);
-
   if (typeof result === 'object' && result !== null && 'image' in result) {
     const image = result.image as { url: string; width: number; height: number };
-    return { outputUrl: image.url };
+    return await saveProcessedImage(image.url, path.basename(imageUrl), shootId);
   } else {
     throw new Error('Unexpected result format from fal.ai');
   }
 }
 
-async function handleReplicateRemoveBackground(imageBase64: string) {
+async function handleReplicateRemoveBackground(imageBase64: string, imageUrl: string, shootId: string) {
   const prediction = await replicate.predictions.create({
     version: "fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003",
     input: { image: `data:image/png;base64,${imageBase64}` },
@@ -78,8 +80,27 @@ async function handleReplicateRemoveBackground(imageBase64: string) {
     }
   }
 
-  console.log('\x1b[36m /remove-background replicate result:\x1b[0m');
-  console.log(output);
+  return await saveProcessedImage(output, path.basename(imageUrl), shootId);
+}
 
-  return { outputUrl: output };
+async function saveProcessedImage(imageUrl: string, originalFileName: string, shootId: string) {
+  const response = await fetch(imageUrl);
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  const publicDir = path.join(process.cwd(), 'public');
+  const bgRemovedDir = path.join(publicDir, 'assets', 'bg-removed', shootId);
+
+  // Ensure the bg-removed directory exists
+  await fs.mkdir(bgRemovedDir, { recursive: true });
+
+  const fileExtension = path.extname(originalFileName);
+  const baseName = path.basename(originalFileName, fileExtension);
+  const newFileName = `nobg_${baseName}${fileExtension}`;
+  const filePath = path.join(bgRemovedDir, newFileName);
+
+  await fs.writeFile(filePath, buffer);
+
+  // Return the URL path relative to the public directory
+  return `/assets/bg-removed/${shootId}/${newFileName}`;
 }

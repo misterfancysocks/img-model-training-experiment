@@ -4,6 +4,7 @@ sequenceDiagram
     participant UI as PreProcessing Component
     participant API as API Routes
     participant Replicate as Replicate API
+    participant Fal as Fal API
     participant DB as Database
 
     User->>UI: Select shoot
@@ -16,8 +17,13 @@ sequenceDiagram
     loop For each image
         UI->>UI: Show loading spinner
         UI->>API: POST /api/remove-background
-        API->>Replicate: Send image for processing
-        Replicate-->>API: Return processed image URL
+        alt Provider is Replicate
+            API->>Replicate: Send image for processing
+            Replicate-->>API: Return processed image URL
+        else Provider is Fal
+            API->>Fal: Send image for processing
+            Fal-->>API: Return processed image URL
+        end
         API-->>UI: Return new image URL
         UI->>UI: Update image display
         UI->>UI: Hide loading spinner

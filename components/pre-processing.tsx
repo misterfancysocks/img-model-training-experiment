@@ -87,85 +87,78 @@ const PreProcessing = () => {
   const handleRemoveBackground = async () => {
     if (!selectedShoot) return;
 
-    for (const image of images) {
-      setProcessingImages(prev => new Set(prev).add(image.id));
-      try {
+    const imagesToProcess = images.filter(img => !img.noBackgroundUrl);
+    setProcessingImages(new Set(imagesToProcess.map(img => img.id)));
+
+    try {
+      const imagePromises = imagesToProcess.map(async (image) => {
         const imageUrl = image.croppedUrl || image.originalUrl;
         const base64Data = await getBase64FromUrl(imageUrl);
-        const base64Image = base64Data.split(',')[1]; // Remove the data:image/jpeg;base64, part
+        const base64Image = base64Data.split(',')[1];
 
-        // New Method using fal.ai
+        return {
+          imageBase64: base64Image,
+          imageUrl: imageUrl,
+          id: image.id
+        };
+      });
 
-        const response = await fetch('/api/remove-background', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            imageBase64: base64Image,
-            fileName: image.fileName,
-            provider: 'fal'  // Add this line to use fal.ai
-          }),
-        });
+      const processedImages = await Promise.all(imagePromises);
 
-        // Old Method using Replicate.
+      const response = await fetch('/api/remove-background', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          images: processedImages,
+          shootId: selectedShoot.toString(),
+          provider: 'fal'  // or 'replicate', depending on your preference
+        }),
+      });
 
-        // const response = await fetch('/api/remove-background', {
-        //   method: 'POST',
-        //   headers: {
-        //     'Content-Type': 'application/json',
-        //   },
-        //   body: JSON.stringify({
-        //     imageBase64: base64Image,
-        //     fileName: image.fileName,
-        //   }),
-        // });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        
-        if (result.error) {
-          throw new Error(result.error);
-        }
-
-        if (!result.outputUrl) {
-          throw new Error('No output URL received from the server');
-        }
-
-        setImages(prevImages => prevImages.map(img => 
-          img.id === image.id ? { ...img, noBackgroundUrl: result.outputUrl } : img
-        ));
-
-        console.log('\x1b[36mpre-processing.tsx>handleRemoveBackground>result:\x1b[0m');
-        console.log(result);
-
-        toast({
-          title: "Success",
-          description: `Background removed for ${image.fileName}`,
-        });
-
-      } catch (error) {
-        console.error('Error removing background:', error);
-        toast({
-          title: "Error",
-          description: `Failed to remove background for ${image.fileName}: ${(error as Error).message}`,
-          variant: "destructive",
-        });
-      } finally {
-        setProcessingImages(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(image.id);
-          return newSet;
-        });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      const result = await response.json() as { outputUrls: string[], error?: string };
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      if (!result.outputUrls || !Array.isArray(result.outputUrls)) {
+        throw new Error('Invalid output URLs received from the server');
+      }
+
+      // Update the images state with the new background-removed URLs
+      setImages(prevImages => prevImages.map(img => {
+        const outputUrl = result.outputUrls.find(url => {
+          const processedImageName = url.split('/').pop();
+          const originalImageName = (img.croppedUrl || img.originalUrl).split('/').pop();
+          return processedImageName?.includes(`nobg_${originalImageName}`);
+        });
+        return outputUrl ? { ...img, noBackgroundUrl: outputUrl } : img;
+      }));
+
+      console.log('\x1b[36mpre-processing.tsx>handleRemoveBackground>result:\x1b[0m');
+      console.log(result);
+
+      toast({
+        title: "Success",
+        description: `Background removed for ${result.outputUrls.length} images`,
+      });
+
+    } catch (error) {
+      console.error('Error removing background:', error);
+      toast({
+        title: "Error",
+        description: `Failed to remove background: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingImages(new Set());
     }
-    toast({
-      title: "Process Completed",
-      description: "Background removal process completed for all images.",
-    });
   };
 
   const handleSave = async () => {

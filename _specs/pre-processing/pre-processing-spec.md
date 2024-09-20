@@ -16,17 +16,20 @@ This component builds upon the [upload-and-crop](../components/upload-and-crop.t
 1. User selects a shoot from the dropdown menu.
 2. Images for the selected shoot are loaded and displayed in the grid.
 3. User clicks the 'Remove Background' button.
-4. For each image:
-   - A loading spinner is displayed over the image.
-   - The image is sent to the `/api/remove-background` endpoint.
-   - The endpoint calls the Replicate API to remove the background.
-   - Once processed, the new image URL is returned and updates the UI.
+4. For images:
+  - All images are processed in parallel.
+  - A loading spinner is displayed over the images.
+  - The image is sent to the `/api/remove-background` endpoint.
+  - The endpoint calls the Replicate or Fal (depending on arg passed to route) API to remove the background.
+  - Once processed, the new image URL is returned and the new display URL is updated.
 5. Processed images are displayed in place of the originals.
 6. A toast message confirms the completion of the background removal process.
 
 ### Image Handling
+#### Server Side
 - Processed images will have a 'nobg_' prefix added to their filename.
   Example: `c_img_01.jpg` -> `nobg_c_img_01.jpg`
+#### Client Side
 - The UI updates to display the processed images once available.
 
 ## Save Functionality
