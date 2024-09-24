@@ -33,6 +33,16 @@ const Header = () => {
               Pre-processing
             </Link>
           </li>
+          <li>
+            <Link
+              href="/lora-training"
+              className={`hover:text-gray-300 ${
+                pathname === '/lora-training' ? 'underline' : ''
+              }`}
+            >
+              LoRA Training
+            </Link>
+          </li>
         </ul>
       </nav>
     </header>

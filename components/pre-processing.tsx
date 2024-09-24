@@ -259,13 +259,13 @@ const PreProcessing = () => {
               {images.map((image) => (
                 <Dialog key={image.id}>
                   <DialogTrigger asChild>
-                    <div className="relative aspect-square cursor-pointer">
+                    <div className="relative w-full pt-[100%] cursor-pointer">
                       <Image
                         src={getImageUrl(image)}
                         alt={image.fileName}
                         fill
                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                        className="object-cover rounded-md"
+                        className="object-contain rounded-md"
                       />
                       {processingImages.has(image.id) && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
@@ -275,13 +275,13 @@ const PreProcessing = () => {
                     </div>
                   </DialogTrigger>
                   <DialogContent className="max-w-3xl">
-                    <div className="relative w-full" style={{ paddingBottom: '75%' }}>
+                    <div className="relative w-full pt-[75%]">
                       <Image
                         src={getImageUrl(image)}
                         alt={image.fileName}
                         fill
                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                        className="object-cover rounded-md"
+                        className="object-contain rounded-md"
                       />
                     </div>
                   </DialogContent>
