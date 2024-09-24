@@ -217,7 +217,7 @@ export async function uploadToFalAi(gcpSignedUrl: string, triggerWord: string): 
       },
     });
 
-    console.log('Full Fal.ai response:', response);
+    //console.log('Full Fal.ai response:', response);
     console.log('diffusers_lora_file:', response.diffusers_lora_file);
     console.log('config_file:', response.config_file);
 

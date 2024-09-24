@@ -92,7 +92,7 @@ export async function trainLoraModel(shootId: number): Promise<LoraTrainingResul
 
     // Step 5: Upload to Fal.ai and start training using the signed URL
     const falAiResponse = await uploadToFalAi(gcpUploadResult.signedUrl, shoot.trigger_word);
-    console.log('LoRA training initiated on Fal.ai:', falAiResponse);
+    // console.log('LoRA training initiated on Fal.ai:', falAiResponse);
 
     // Step 6: Download the diffusers_lora_file and config_file from Fal.ai
     const loraFileResponse = await fetch(falAiResponse.diffusers_lora_file.url);
