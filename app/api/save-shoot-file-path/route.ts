@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { saveShootActionFilePath } from '@/actions/shoot-actions';
+import { saveShootFilePathAction } from '@/actions/shoot-actions';
 import { PersonData, ShootData, ImageData } from '@/db/schema/schema';
 
 export async function POST(request: Request) {
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
       hasCroppedUrl: !!img.croppedUrl
     })));
 
-    const result = await saveShootActionFilePath(
+    const result = await saveShootFilePathAction(
       person as PersonData,
       shoot as ShootData,
       images as ImageData[]

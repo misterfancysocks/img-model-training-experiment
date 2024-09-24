@@ -44,6 +44,8 @@ export interface ShootData {
   costume: string;
   backdrop?: string;
   personId?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ImageData {
@@ -51,7 +53,10 @@ export interface ImageData {
   shootId: number;
   fileName: string;
   originalUrl: string;
+  caption?: string; // Add this line
   croppedUrl?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface PersonData {
@@ -61,4 +66,55 @@ export interface PersonData {
   ethnicity: 'white' | 'latino' | 'black' | 'asian';
   gender: 'male' | 'female';
   age: number;
+  trigger?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PreprocessedImageData {
+  id?: number;
+  shootId: number;
+  imageId: number;
+  beforeFileName: string;
+  afterFileName: string;
+  preprocessedUrl: string;
+  caption?: string;
+  llm?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface LoraData {
+  id?: number;
+  personId: number;
+  url: string;
+  trainedOn: string; // ISO date string
+  service: string;
+  model: string;
+  modelVersion: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface GeneratedImageData {
+  id?: number;
+  loraId: number;
+  imageUrl: string;
+  prompt?: string;
+  negativePrompt?: string;
+  seed?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface LoraPromptData {
+  id?: number;
+  personId: number;
+  shootId: number;
+  loraId: number;
+  generatedImageId?: number;
+  prompt: string;
+  negativePrompt?: string;
+  created_at?: string;
+  updated_at?: string;
 }

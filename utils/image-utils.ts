@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import sharp from 'sharp';
 
 /**
  * Utility functions for handling image operations in the Costumes app.
@@ -44,3 +45,22 @@ export async function saveImage(base64Data: string, shootId: number, fileName: s
 // - resizeImage(imagePath: string, width: number, height: number): Promise<string>
 // - convertImageFormat(imagePath: string, format: 'jpeg' | 'png' | 'webp'): Promise<string>
 // - getImageMetadata(imagePath: string): Promise<ImageMetadata>
+
+export async function downsizeImage(base64: string, width: number = 800): Promise<string> {
+  try {
+    console.log('Downsizing image, input length:', base64.length);
+    const buffer = Buffer.from(base64, 'base64');
+    const resizedBuffer = await sharp(buffer)
+      .resize({ width })
+      .jpeg() // Ensure output is JPEG
+      .toBuffer();
+    const resizedBase64 = resizedBuffer.toString('base64');
+    console.log('Downsized image, output length:', resizedBase64.length);
+    return resizedBase64;
+  } catch (error) {
+    console.error('Error in downsizeImage:', error);
+    throw error;
+  }
+}
+
+// Add any other image utility functions here

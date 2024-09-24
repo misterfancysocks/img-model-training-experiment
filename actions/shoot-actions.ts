@@ -10,7 +10,7 @@ import { getExistingShoots as dbGetExistingShoots } from '@/db/queries/shoot-que
 import path from 'path';
 import fs from 'fs/promises';
 import { saveImage } from '@/utils/image-utils';
-import { savePreprocessedImage } from '../db/queries/shoot-queries';
+import { savePreprocessedImage, saveLoraToDB, saveGeneratedImageToDB, saveLoraPromptToDB } from '../db/queries/shoot-queries';
 
 /**
  * Retrieves the latest shoot from the database.
@@ -125,9 +125,9 @@ export async function saveShootAction(person: PersonData, shoot: ShootData, imag
         }
       } else if (img.originalImg) {
         // Handle base64 data (new functionality)
-        originalUrl = await saveBase64Image(img.originalImg, shootId, `o_${img.fileName}`);
+        originalUrl = await saveBase64ImageAction(img.originalImg, shootId, `o_${img.fileName}`);
         if (img.croppedImg) {
-          croppedUrl = await saveBase64Image(img.croppedImg, shootId, `c_${img.fileName}`);
+          croppedUrl = await saveBase64ImageAction(img.croppedImg, shootId, `c_${img.fileName}`);
         }
       } else {
         console.error(`Invalid image data for file: ${img.fileName}`);
@@ -157,7 +157,7 @@ export async function saveShootAction(person: PersonData, shoot: ShootData, imag
   }
 }
 
-async function saveBase64Image(base64Data: string, shootId: number, fileName: string): Promise<string> {
+async function saveBase64ImageAction(base64Data: string, shootId: number, fileName: string): Promise<string> {
   const publicDir = path.join(process.cwd(), 'public');
   const shootDir = path.join(publicDir, 'assets', shootId.toString());
   await fs.mkdir(shootDir, { recursive: true });
@@ -190,7 +190,7 @@ export async function getExistingShoots() {
  * Retrieves shoot details from the database.
  * @param shootId The ID of the shoot to retrieve details for.
  */
-export async function getShootDetails(shootId: number): Promise<ActionState> {
+export async function getShootDetailsAction(shootId: number): Promise<ActionState> {
   try {
     const shootDetails = await getShootDetailsFromDb(shootId);
     if (!shootDetails) {
@@ -203,7 +203,7 @@ export async function getShootDetails(shootId: number): Promise<ActionState> {
   }
 }
 
-export async function saveShootActionBase64(person: PersonData, shoot: ShootData, images: any[]): Promise<ActionState> {
+export async function saveShootBase64Action(person: PersonData, shoot: ShootData, images: any[]): Promise<ActionState> {
   try {
     console.log('Saving shoot with base64 images:', images.length);
 
@@ -216,10 +216,10 @@ export async function saveShootActionBase64(person: PersonData, shoot: ShootData
     const savedImagePaths = await Promise.all(images.map(async (img) => {
       console.log(`Processing image: ${img.fileName}`);
 
-      const originalUrl = await saveBase64Image(img.originalImg, shootId, `o_${img.fileName}`);
+      const originalUrl = await saveBase64ImageAction(img.originalImg, shootId, `o_${img.fileName}`);
       let croppedUrl: string | undefined;
       if (img.croppedImg) {
-        croppedUrl = await saveBase64Image(img.croppedImg, shootId, `c_${img.fileName}`);
+        croppedUrl = await saveBase64ImageAction(img.croppedImg, shootId, `c_${img.fileName}`);
       }
 
       console.log(`Saved image: ${img.fileName}, Original URL: ${originalUrl}, Cropped URL: ${croppedUrl}`);
@@ -241,7 +241,7 @@ export async function saveShootActionBase64(person: PersonData, shoot: ShootData
   }
 }
 
-export async function saveShootActionFilePath(person: PersonData, shoot: ShootData, images: any[]): Promise<ActionState> {
+export async function saveShootFilePathAction(person: PersonData, shoot: ShootData, images: any[]): Promise<ActionState> {
   try {
     console.log('Saving shoot with file path images:', images.length);
 
@@ -285,10 +285,11 @@ export async function savePreprocessedImageAction(
   imageId: number,
   beforeFileName: string,
   afterFileName: string,
-  preprocessedUrl: string
+  preprocessedUrl: string,
+  caption?: string // Add caption parameter
 ): Promise<ActionState> {
   try {
-    const result = await savePreprocessedImage(shootId, imageId, beforeFileName, afterFileName, preprocessedUrl);
+    const result = await savePreprocessedImage(shootId, imageId, beforeFileName, afterFileName, preprocessedUrl, caption);
     return { 
       status: 'success', 
       message: 'Preprocessed image saved successfully', 
@@ -300,5 +301,36 @@ export async function savePreprocessedImageAction(
       status: 'error', 
       message: 'Failed to save preprocessed image: ' + (error as Error).message 
     };
+  }
+}
+
+// Add these new functions
+export async function saveLoraAction(personId: number, url: string, trainedOn: Date, service: string, model: string, modelVersion: string): Promise<ActionState> {
+  try {
+    const result = await saveLoraToDB(personId, url, trainedOn, service, model, modelVersion);
+    return { status: 'success', message: 'LoRA saved successfully', data: result };
+  } catch (error) {
+    console.error('Error in saveLora:', error);
+    return { status: 'error', message: 'Failed to save LoRA: ' + (error as Error).message };
+  }
+}
+
+export async function saveGeneratedImageAction(loraId: number, imageUrl: string, prompt?: string, negativePrompt?: string, seed?: number): Promise<ActionState> {
+  try {
+    const result = await saveGeneratedImageToDB(loraId, imageUrl, prompt, negativePrompt, seed);
+    return { status: 'success', message: 'Generated image saved successfully', data: result };
+  } catch (error) {
+    console.error('Error in saveGeneratedImage:', error);
+    return { status: 'error', message: 'Failed to save generated image: ' + (error as Error).message };
+  }
+}
+
+export async function saveLoraPromptAction(personId: number, shootId: number, loraId: number, prompt: string, negativePrompt?: string, generatedImageId?: number): Promise<ActionState> {
+  try {
+    const result = await saveLoraPromptToDB(personId, shootId, loraId, prompt, negativePrompt, generatedImageId);
+    return { status: 'success', message: 'LoRA prompt saved successfully', data: result };
+  } catch (error) {
+    console.error('Error in saveLoraPrompt:', error);
+    return { status: 'error', message: 'Failed to save LoRA prompt: ' + (error as Error).message };
   }
 }

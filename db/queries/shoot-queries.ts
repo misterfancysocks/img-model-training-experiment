@@ -1,5 +1,5 @@
 import { openDb } from '../db';
-import { ShootData, PersonData, ImageData } from '../schema/schema';
+import { ShootData, PersonData, ImageData, PreprocessedImageData, LoraData, GeneratedImageData, LoraPromptData } from '../schema/schema';
 import { Database } from 'sqlite';
 import path from 'path';
 
@@ -145,7 +145,7 @@ export async function updateShootWithImages(shootId: number, images: { fileName:
   }
 }
 
-export async function getShootDetailsFromDb(shootId: number): Promise<{ person: PersonData; shoot: ShootData; images: ImageData[] } | null> {
+export async function getShootDetailsFromDb(shootId: number): Promise<{ person: PersonData; shoot: ShootData; images: ImageData[]; preprocessedImages: PreprocessedImageData[]; loras: LoraData[]; generatedImages: GeneratedImageData[]; loraPrompts: LoraPromptData[] } | null> {
   const db = await openDb();
   try {
     const shoot = await db.get<ShootData>('SELECT * FROM shoots WHERE id = ?', shootId);
@@ -156,13 +156,36 @@ export async function getShootDetailsFromDb(shootId: number): Promise<{ person: 
 
     const images = await db.all<ImageData[]>('SELECT * FROM images WHERE shootId = ?', shootId);
 
+    const preprocessedImages = await db.all<PreprocessedImageData[]>('SELECT * FROM preprocessed_images WHERE shootId = ?', shootId);
+
+    const loras = await db.all<LoraData[]>('SELECT * FROM loras WHERE personId = ?', person.id);
+
+    const generatedImages = await db.all<GeneratedImageData[]>(`
+      SELECT gi.* FROM generated_images gi
+      JOIN loras l ON gi.loraId = l.id
+      WHERE l.personId = ?
+    `, person.id);
+
+    const loraPrompts = await db.all<LoraPromptData[]>(`
+      SELECT * FROM lora_prompts
+      WHERE personId = ? AND shootId = ?
+    `, person.id, shootId);
+
     const modifiedImages = images.map(img => ({
       ...img,
       originalUrl: `/assets/${shootId}/${path.basename(img.originalUrl)}`,
       croppedUrl: img.croppedUrl ? `/assets/${shootId}/${path.basename(img.croppedUrl)}` : null
     }));
 
-    return { person, shoot, images: modifiedImages as ImageData[] };
+    return { 
+      person, 
+      shoot, 
+      images: modifiedImages as ImageData[], 
+      preprocessedImages,
+      loras,
+      generatedImages,
+      loraPrompts
+    };
   } finally {
     await db.close();
   }
@@ -183,15 +206,90 @@ export async function savePreprocessedImage(
   imageId: number,
   beforeFileName: string,
   afterFileName: string,
-  preprocessedUrl: string
+  preprocessedUrl: string,
+  caption?: string,
+  llm: string = 'Claude-3-Haiku' // Default value for the LLM used
 ): Promise<any> {
   const db = await openDb();
   try {
     const result = await db.run(`
-      INSERT INTO preprocessed_images (shootId, imageId, beforeFileName, afterFileName, preprocessedUrl)
-      VALUES (?, ?, ?, ?, ?)
-    `, [shootId, imageId, beforeFileName, afterFileName, preprocessedUrl]);
+      INSERT INTO preprocessed_images (shootId, imageId, beforeFileName, afterFileName, preprocessedUrl, caption, llm)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [shootId, imageId, beforeFileName, afterFileName, preprocessedUrl, caption, llm]);
     return result;
+  } finally {
+    await db.close();
+  }
+}
+
+export async function saveLoraToDB(
+  personId: number,
+  url: string,
+  trainedOn: Date,
+  service: string,
+  model: string,
+  modelVersion: string
+): Promise<any> {
+  const db = await openDb();
+  try {
+    const result = await db.run(`
+      INSERT INTO loras (personId, url, trainedOn, service, model, modelVersion)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [personId, url, trainedOn.toISOString(), service, model, modelVersion]);
+    return result;
+  } finally {
+    await db.close();
+  }
+}
+
+export async function saveGeneratedImageToDB(
+  loraId: number,
+  imageUrl: string,
+  prompt?: string,
+  negativePrompt?: string,
+  seed?: number
+): Promise<any> {
+  const db = await openDb();
+  try {
+    const result = await db.run(`
+      INSERT INTO generated_images (loraId, imageUrl, prompt, negativePrompt, seed)
+      VALUES (?, ?, ?, ?, ?)
+    `, [loraId, imageUrl, prompt, negativePrompt, seed]);
+    return result;
+  } finally {
+    await db.close();
+  }
+}
+
+export async function saveLoraPromptToDB(
+  personId: number,
+  shootId: number,
+  loraId: number,
+  prompt: string,
+  negativePrompt?: string,
+  generatedImageId?: number
+): Promise<any> {
+  const db = await openDb();
+  try {
+    const result = await db.run(`
+      INSERT INTO lora_prompts (personId, shootId, loraId, prompt, negativePrompt, generatedImageId)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [personId, shootId, loraId, prompt, negativePrompt, generatedImageId]);
+    return result;
+  } finally {
+    await db.close();
+  }
+}
+
+export async function getPersonDataForShoot(shootId: number): Promise<PersonData | null> {
+  const db = await openDb();
+  try {
+    const person = await db.get<PersonData>(`
+      SELECT p.* FROM persons p
+      JOIN shoots s ON s.personId = p.id
+      WHERE s.id = ?
+    `, shootId);
+    return person || null;
   } finally {
     await db.close();
   }

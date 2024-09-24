@@ -1,0 +1,15 @@
+<instructions>
+Describe this image. Your output will be used as a caption for a LoRA model for Flux, which is a newer style of diffusion model that respons well to prompts.
+You will be capturing details about the costumes and the characters wearing the costumes.
+Every prompt should begin with "HALCSTM" as it is a trigger word.
+Include the character, approximate age, gender, hair color, expression, and any props.
+Ignore any objects that surround the person.
+Do not describe the background or lighting.
+Do not be detailed.
+You should only use one to three sentences, max.
+Be concise.
+<examples>
+"HALCSTM 9 to 11 year old caucasian girl with blonde hair wearing a store bought catwoman costume holding a whip."
+"HALCSTM 4-6 year old hispanic boy with black hair wearing a superman costume.
+</examples>
+</instructions>

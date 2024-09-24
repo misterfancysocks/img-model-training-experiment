@@ -4,6 +4,11 @@ import Replicate from "replicate";
 import fs from 'fs/promises';
 import path from 'path';
 
+// Configure fal client with the API key from environment variables
+fal.config({
+  credentials: process.env.FAL_KEY,
+});
+
 // Initialize Replicate client
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -15,6 +20,11 @@ export async function POST(req: NextRequest) {
 
     if (!images || !Array.isArray(images) || images.length === 0 || !shootId) {
       return NextResponse.json({ error: 'No images or shoot ID provided' }, { status: 400 });
+    }
+
+    // Add a check to ensure the API key is set
+    if (!process.env.FAL_KEY) {
+      throw new Error('FAL_KEY is not set in environment variables');
     }
 
     const processImage = async (image: { imageBase64: string; imageUrl: string }) => {
@@ -44,12 +54,14 @@ async function handleFalRemoveBackground(imageBase64: string, imageUrl: string, 
     input: {
       image_url: uploadedImageUrl,
       sync_mode: true,
+      logs: true,
     },
     logs: true,
     onQueueUpdate: (update) => {
       if (update.status === "IN_PROGRESS") {
         console.log('\x1b[36m fal.ai rembg progress:\x1b[0m');
-        update.logs.map((log) => log.message).forEach(console.log);
+        // console.log('update', update);
+        update.logs.forEach(log => console.log(`\x1b[36m${log.message}\x1b[0m`));
       }
     },
   });

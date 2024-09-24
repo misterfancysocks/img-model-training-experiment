@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
 import { Loader2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import path from 'path';
+import { captionImageAction } from '@/actions/img-caption-actions';
 
 type Shoot = {
   id: number;
@@ -21,6 +22,7 @@ type ImageData = {
   originalUrl: string;
   croppedUrl?: string;
   noBackgroundUrl?: string;
+  caption?: string;
 };
 
 const PreProcessing = () => {
@@ -111,7 +113,7 @@ const PreProcessing = () => {
   const handleRemoveBackground = async () => {
     if (!selectedShoot) return;
 
-    const imagesToProcess = images.filter(img => !img.noBackgroundUrl);
+    const imagesToProcess = images.filter(img => !img.noBackgroundUrl || !img.caption);
     setProcessingImages(new Set(imagesToProcess.map(img => img.id)));
 
     try {
@@ -120,64 +122,50 @@ const PreProcessing = () => {
         const base64Data = await getBase64FromUrl(imageUrl);
         const base64Image = base64Data.split(',')[1];
 
+        // Create a full URL for captioning
+        const fullImageUrl = new URL(imageUrl, window.location.origin).href;
+
+        // Run background removal and captioning in parallel
+        const [bgRemovalResult, captionResult] = await Promise.all([
+          fetch('/api/remove-background', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              images: [{ imageBase64: base64Image, imageUrl, id: image.id }],
+              shootId: selectedShoot.toString(),
+              provider: 'fal'
+            }),
+          }).then(res => res.json()),
+          captionImageAction(fullImageUrl, selectedShoot)
+        ]);
+
         return {
-          imageBase64: base64Image,
-          imageUrl: imageUrl,
-          id: image.id
+          ...image,
+          noBackgroundUrl: bgRemovalResult.outputUrls[0],
+          caption: captionResult
         };
       });
 
       const processedImages = await Promise.all(imagePromises);
 
-      const response = await fetch('/api/remove-background', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          images: processedImages,
-          shootId: selectedShoot.toString(),
-          provider: 'fal'  // or 'replicate', depending on your preference
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json() as { outputUrls: string[], error?: string };
-      
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      if (!result.outputUrls || !Array.isArray(result.outputUrls)) {
-        throw new Error('Invalid output URLs received from the server');
-      }
-
-      // Update the images state with the new background-removed URLs
       setImages(prevImages => prevImages.map(img => {
-        const outputUrl = result.outputUrls.find(url => {
-          const processedImageName = url.split('/').pop();
-          const originalImageName = (img.croppedUrl || img.originalUrl).split('/').pop();
-          return processedImageName?.includes(`nobg_${originalImageName}`);
-        });
-        return outputUrl ? { ...img, noBackgroundUrl: outputUrl } : img;
+        const processedImg = processedImages.find(pImg => pImg.id === img.id);
+        return processedImg || img;
       }));
 
       console.log('\x1b[36mpre-processing.tsx>handleRemoveBackground>result:\x1b[0m');
-      console.log(result);
+      console.log(processedImages);
 
       toast({
         title: "Success",
-        description: `Background removed for ${result.outputUrls.length} images`,
+        description: `Processed ${processedImages.length} images`,
       });
 
     } catch (error) {
-      console.error('Error removing background:', error);
+      console.error('Error processing images:', error);
       toast({
         title: "Error",
-        description: `Failed to remove background: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        description: `Failed to process images: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive",
       });
     } finally {
@@ -206,6 +194,7 @@ const PreProcessing = () => {
             beforeFileName,
             afterFileName,
             preprocessedUrl: img.noBackgroundUrl,
+            caption: img.caption,
           }),
         });
 
@@ -213,6 +202,9 @@ const PreProcessing = () => {
           throw new Error(`Failed to save preprocessed image: ${img.fileName}`);
         }
       }
+
+      // Refresh the images state to reflect the saved changes
+      await fetchShootDetails(selectedShoot);
 
       toast({
         title: "Success",

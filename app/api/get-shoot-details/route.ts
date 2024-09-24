@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getShootDetails } from '@/actions/shoot-actions';
+import { getShootDetailsAction } from '@/actions/shoot-actions';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Shoot ID is required' }, { status: 400 });
   }
 
-  const result = await getShootDetails(parseInt(id, 10));
+  const result = await getShootDetailsAction(parseInt(id, 10));
   if (result.status === 'success') {
     return NextResponse.json(result.data);
   } else {

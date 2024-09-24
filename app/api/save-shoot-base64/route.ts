@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { saveShootActionBase64 } from '@/actions/shoot-actions';
+import { saveShootBase64Action } from '@/actions/shoot-actions';
 import { PersonData, ShootData, ImageData } from '@/db/schema/schema';
 
 export async function POST(request: Request) {
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
       hasCroppedUrl: !!img.croppedUrl
     })));
 
-    const result = await saveShootActionBase64(
+    const result = await saveShootBase64Action(
       person as PersonData,
       shoot as ShootData,
       images as ImageData[]
