@@ -13,6 +13,12 @@ export default function Home() {
           <Link href="/pre-processing">
             <Button className="w-full">Pre-processing</Button>
           </Link>
+          <Link href="/lora-training">
+            <Button className="w-full">LoRA Training</Button>
+          </Link>
+          <Link href="/image-generation">
+            <Button className="w-full">Image Generation</Button>
+          </Link>
         </div>
       </div>
       <div className="flex-grow p-6">

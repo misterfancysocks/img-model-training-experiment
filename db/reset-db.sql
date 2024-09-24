@@ -88,7 +88,9 @@ FOREIGN KEY (personId) REFERENCES persons(id) ON DELETE CASCADE
 CREATE TABLE IF NOT EXISTS generated_images (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 loraId INTEGER NOT NULL,
-imageUrl TEXT NOT NULL,
+fullUrl TEXT NOT NULL, -- https://storage.googleapis.com/{bucket}/{path}
+bucket TEXT NOT NULL, -- bucket the file was saved to
+path TEXT NOT NULL, -- path to the file without the bucket
 prompt TEXT,
 negativePrompt TEXT,
 seed INTEGER,

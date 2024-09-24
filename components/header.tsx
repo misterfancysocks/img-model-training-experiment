@@ -43,6 +43,16 @@ const Header = () => {
               LoRA Training
             </Link>
           </li>
+          <li>
+            <Link
+              href="/image-generation"
+              className={`hover:text-gray-300 ${
+                pathname === '/image-generation' ? 'underline' : ''
+              }`}
+            >
+              Image Generation
+            </Link>
+          </li>
         </ul>
       </nav>
     </header>

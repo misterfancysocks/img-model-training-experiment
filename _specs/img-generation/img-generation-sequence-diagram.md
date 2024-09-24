@@ -4,8 +4,6 @@ sequenceDiagram
     participant UI as Image Generation UI
     participant GetLoras as /api/get-lora-models
     participant GenImage as /api/generate-image
-    participant SaveImage as /api/save-generated-image
-    participant GetImages as /api/get-generated-images
     participant DB as SQLite Database
     participant GCS as Google Cloud Storage
     participant Fal as Fal.ai API
@@ -20,27 +18,22 @@ sequenceDiagram
     User->>UI: Input prompt and parameters
     User->>UI: Click "Generate Image"
     UI->>GenImage: POST /api/generate-image
-    GenImage->>GCS: Fetch LoRA file
-    GCS-->>GenImage: Return LoRA file URL
-    GenImage->>Fal: Send generation request (LoRA URL, prompt, parameters)
-    Fal-->>GenImage: Return generated image URL
-    GenImage->>GCS: Download image from Fal.ai
-    GenImage->>GCS: Upload image to GCS bucket
-    GCS-->>GenImage: Return GCS image URL
+    GenImage->>DB: Fetch LoRA details by ID
+    DB-->>GenImage: Return LoRA details
+    GenImage->>GCS: Generate signed URL for LoRA file
+    GCS-->>GenImage: Return signed URL
+    GenImage->>Fal: Send generation request (signed URL, prompt, parameters)
+    Fal-->>GenImage: Return generated image URLs
+    GenImage->>GCS: Download images from Fal.ai
+    GenImage->>GCS: Upload images to GCS bucket
+    GCS-->>GenImage: Return GCS image URLs
     GenImage->>DB: Save image metadata
     DB-->>GenImage: Confirm save
-    GenImage-->>UI: Return image URL and metadata
-    UI->>User: Display generated image
-
-    User->>UI: Save/Download image
-    UI->>SaveImage: POST /api/save-generated-image
-    SaveImage->>DB: Update image metadata
-    DB-->>SaveImage: Confirm update
-    SaveImage-->>UI: Confirm save/download
+    GenImage-->>UI: Return image URLs and metadata
+    UI->>User: Display generated images
 
     User->>UI: View image history
-    UI->>GetImages: GET /api/get-generated-images
-    GetImages->>DB: Fetch user's generated images
-    DB-->>GetImages: Return image data
-    GetImages-->>UI: Display image history
+    UI->>DB: Fetch user's generated images
+    DB-->>UI: Return image data
+    UI->>User: Display image history
 ```
