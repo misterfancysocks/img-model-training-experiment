@@ -3,8 +3,9 @@ sequenceDiagram
     participant User
     participant UI as PreProcessing Component
     participant API as API Routes
-    participant Replicate as Replicate API
+    participant ImgCaption as Image Captioning
     participant Fal as Fal API
+    participant Replicate as Replicate API
     participant DB as Database
     participant FileSystem as File System
 
@@ -21,16 +22,22 @@ sequenceDiagram
     loop For each unprocessed image
         UI->>UI: Show loading spinner
         UI->>UI: Convert image to base64
-        UI->>API: POST /api/remove-background
-        alt Provider is Replicate
-            API->>Replicate: Send image for processing
-            Replicate-->>API: Return processed image URL
-        else Provider is Fal
-            API->>Fal: Send image for processing
+        par Background Removal
+            UI->>API: POST /api/remove-background
+            API->>Fal: Send image for processing (default)
             Fal-->>API: Return processed image URL
+            Note over API,Fal: Fallback to Replicate if Fal fails
+        and Image Captioning
+            UI->>ImgCaption: captionImageAction(imageUrl, shootId)
+            ImgCaption->>DB: Fetch person data for shoot
+            DB-->>ImgCaption: Return person data
+            ImgCaption->>ImgCaption: Downsize image
+            ImgCaption->>Anthropic: Send image and prompt for captioning
+            Anthropic-->>ImgCaption: Return generated caption
         end
         API-->>UI: Return new image URL
-        UI->>UI: Update image display
+        ImgCaption-->>UI: Return caption and LLM model
+        UI->>UI: Update image display and store caption
         UI->>UI: Hide loading spinner
     end
 
@@ -39,9 +46,8 @@ sequenceDiagram
     User->>UI: Click "Save"
     loop For each preprocessed image
         UI->>API: POST /api/save-preprocessed-image
-        API->>FileSystem: Save preprocessed image
-        API->>DB: Update image record
-        DB-->>API: Confirm update
+        API->>DB: Save preprocessed image data
+        DB-->>API: Confirm save
         API-->>UI: Confirm save
     end
     UI->>UI: Show save confirmation toast

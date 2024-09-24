@@ -23,6 +23,7 @@ type ImageData = {
   croppedUrl?: string;
   noBackgroundUrl?: string;
   caption?: string;
+  llm?: string;
 };
 
 const PreProcessing = () => {
@@ -138,12 +139,15 @@ const PreProcessing = () => {
           }).then(res => res.json()),
           captionImageAction(fullImageUrl, selectedShoot)
         ]);
+        console.log('\x1b[36mpre-processing.tsx>handleRemoveBackground>captionResult.model:\x1b[0m', captionResult.model);
 
         return {
           ...image,
           noBackgroundUrl: bgRemovalResult.outputUrls[0],
-          caption: captionResult
+          caption: captionResult.caption,
+          llm: captionResult.model
         };
+
       });
 
       const processedImages = await Promise.all(imagePromises);
@@ -183,6 +187,7 @@ const PreProcessing = () => {
         const beforeFileName = img.croppedUrl ? path.basename(img.croppedUrl) : path.basename(img.originalUrl);
         const afterFileName = path.basename(img.noBackgroundUrl as string);
         
+        console.log('\x1b[36mpre-processing.tsx>handleSave>img.llm:\x1b[0m', img.llm);
         const response = await fetch('/api/save-preprocessed-image', {
           method: 'POST',
           headers: {
@@ -195,6 +200,7 @@ const PreProcessing = () => {
             afterFileName,
             preprocessedUrl: img.noBackgroundUrl,
             caption: img.caption,
+            llm: img.llm,
           }),
         });
 
@@ -257,9 +263,9 @@ const PreProcessing = () => {
                       <Image
                         src={getImageUrl(image)}
                         alt={image.fileName}
-                        layout="fill"
-                        objectFit="cover"
-                        className="rounded-md"
+                        fill
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        className="object-cover rounded-md"
                       />
                       {processingImages.has(image.id) && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
@@ -273,8 +279,9 @@ const PreProcessing = () => {
                       <Image
                         src={getImageUrl(image)}
                         alt={image.fileName}
-                        layout="fill"
-                        objectFit="contain"
+                        fill
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        className="object-cover rounded-md"
                       />
                     </div>
                   </DialogContent>

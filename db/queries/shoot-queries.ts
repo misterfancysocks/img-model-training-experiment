@@ -208,7 +208,7 @@ export async function savePreprocessedImage(
   afterFileName: string,
   preprocessedUrl: string,
   caption?: string,
-  llm: string = 'Claude-3-Haiku' // Default value for the LLM used
+  llm?: string // Make llm optional
 ): Promise<any> {
   const db = await openDb();
   try {

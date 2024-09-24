@@ -3,7 +3,7 @@ import { savePreprocessedImageAction } from '@/actions/shoot-actions';
 
 export async function POST(request: Request) {
   try {
-    const { shootId, imageId, beforeFileName, afterFileName, preprocessedUrl, caption } = await request.json();
+    const { shootId, imageId, beforeFileName, afterFileName, preprocessedUrl, caption, llm } = await request.json();
     
     const result = await savePreprocessedImageAction(
       shootId,
@@ -11,7 +11,8 @@ export async function POST(request: Request) {
       beforeFileName,
       afterFileName,
       preprocessedUrl,
-      caption
+      caption,
+      llm
     );
 
     if (result.status === 'success') {

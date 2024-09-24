@@ -286,10 +286,11 @@ export async function savePreprocessedImageAction(
   beforeFileName: string,
   afterFileName: string,
   preprocessedUrl: string,
-  caption?: string // Add caption parameter
+  caption?: string,
+  llm?: string // Add llm parameter
 ): Promise<ActionState> {
   try {
-    const result = await savePreprocessedImage(shootId, imageId, beforeFileName, afterFileName, preprocessedUrl, caption);
+    const result = await savePreprocessedImage(shootId, imageId, beforeFileName, afterFileName, preprocessedUrl, caption, llm);
     return { 
       status: 'success', 
       message: 'Preprocessed image saved successfully', 

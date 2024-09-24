@@ -6,10 +6,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import { getPersonDataForShoot } from '@/db/queries/shoot-queries'; // Add this import
 
-export async function captionImageAction(imageUrl: string, shootId: number): Promise<string> {
+export async function captionImageAction(imageUrl: string, shootId: number): Promise<{ caption: string; model: string }> {
   const anthropicClient = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY || '',
   });
+
+  const model = "claude-3-haiku-20240307"; // Store the actual model being used
 
   // Read the prompt from the file
   const promptPath = path.join(process.cwd(), '.prompts', 'caption_person.txt');
@@ -27,15 +29,15 @@ export async function captionImageAction(imageUrl: string, shootId: number): Pro
     const arrayBuffer = await response.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString('base64');
     
-    console.log('\x1b[36mImage fetched and converted to base64\x1b[0m');
-    console.log('\x1b[36mBase64 image (first 100 chars):\x1b[0m', base64Image.substring(0, 100));
+    // console.log('\x1b[36mImage fetched and converted to base64\x1b[0m');
+    // console.log('\x1b[36mBase64 image (first 100 chars):\x1b[0m', base64Image.substring(0, 100));
 
     const downsizedImage = await downsizeImage(base64Image);
-    console.log('\x1b[36mImage downsized\x1b[0m');
-    console.log('\x1b[36mDownsized image (first 100 chars):\x1b[0m', downsizedImage.substring(0, 100));
+    // console.log('\x1b[36mImage downsized\x1b[0m');
+    // console.log('\x1b[36mDownsized image (first 100 chars):\x1b[0m', downsizedImage.substring(0, 100));
 
     const anthropicResponse = await anthropicClient.messages.create({
-      model: "claude-3-haiku-20240307",
+      model: model,
       max_tokens: 300,
       messages: [
         {
@@ -62,10 +64,10 @@ export async function captionImageAction(imageUrl: string, shootId: number): Pro
 
     if (anthropicResponse.content && anthropicResponse.content[0] && anthropicResponse.content[0].type === 'text') {
       const generatedCaption = anthropicResponse.content[0].text;
-      // Insert the generated caption into the specified string format
       const fullCaption = `${personData.trigger || 'TRIGGER'}, a ${personData.ethnicity}, ${personData.age} year old, ${personData.gender}. ${generatedCaption}`;
       console.log('\x1b[36mImage caption:\x1b[0m', fullCaption);
-      return fullCaption;
+      console.log('\x1b[36mLLM:\x1b[0m', model);
+      return { caption: fullCaption, model: model };
     } else {
       throw new Error('Unexpected response format from Anthropic API');
     }
