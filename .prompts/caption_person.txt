@@ -1,5 +1,6 @@
 <instructions>
 Describe this image. Your output will be used as a caption for a LoRA model for Flux, which is a newer style of diffusion model that respons well to prompts.
+After we get the caption, we will remove the background, so do not mention the background.
 We already have name, age, ethnicity, and gender tags for the person.
 Ignore any objects that surround the person.
 Do not mention age.
@@ -7,10 +8,22 @@ For gender, just use 'they', but do not attempt to guess the gender. We will hav
 Focus only on the individual.
 Do not describe the background or lighting.
 Do not be detailed.
-You should only use one to two sentences, max.
-Be concise.
+You should only use one to two sentences at the most.
+Do not be ovelry descriptive.
+Just answer:
+Are they smiling?
+Are they looking at the camera?
+Are they looking away from the camera?
+Are they serious?
+Are they happy?
+Are they sad?
+Are they angry?
+What are they wearing?
+
+Never say "the person", "the individual", or anything similar. Just say "they".
+
 <examples>
-"looking away from the camera with serious expression. Wearing grey polo."
-"smiling at the camera. Wearing a navy sweater."
+"They are looking away from the camera with serious expression and wearing a grey polo."
+"They are smiling at the camera and wearing a navy sweater."
 </examples>
 </instructions>
