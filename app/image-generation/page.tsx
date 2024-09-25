@@ -33,13 +33,22 @@ interface GenerateImageResponse {
   prompt: string;
 }
 
+interface GeneratedImage {
+  url: string;
+  width: number;
+  height: number;
+  content_type: string;
+  timestamp: number;
+}
+
 const IMAGE_SIZE_OPTIONS = [
-  { label: 'Square HD (512x512)', value: 'square_hd' },
-  { label: 'Square (512x512)', value: 'square' },
-  { label: 'Portrait 4:3 (768x1024)', value: 'portrait_4_3' },
-  { label: 'Portrait 16:9 (896x504)', value: 'portrait_16_9' },
-  { label: 'Landscape 4:3 (1024x768)', value: 'landscape_4_3' },
-  { label: 'Landscape 16:9 (1280x720)', value: 'landscape_16_9' },
+  { label: 'Square HD (512x512)', value: 'square_hd', width: 512, height: 512 },
+  { label: 'Square (512x512)', value: 'square', width: 512, height: 512 },
+  { label: 'Portrait 4:3 (768x1024)', value: 'portrait_4_3', width: 768, height: 1024 },
+  { label: 'Portrait 16:9 (896x504)', value: 'portrait_16_9', width: 896, height: 504 },
+  { label: 'Landscape 4:3 (1024x768)', value: 'landscape_4_3', width: 1024, height: 768 },
+  { label: 'Landscape 16:9 (1280x720)', value: 'landscape_16_9', width: 1280, height: 720 },
+  { label: 'Custom', value: 'custom' },
 ]
 
 export default function ImageGenerationPage() {
@@ -48,8 +57,11 @@ export default function ImageGenerationPage() {
   const [prompt, setPrompt] = useState<string>("");
   const [numImages, setNumImages] = useState<number>(1);
   const [imageSize, setImageSize] = useState<string>("portrait_4_3");
-  const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  const [customWidth, setCustomWidth] = useState<number>(768);
+  const [customHeight, setCustomHeight] = useState<number>(1024);
+  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [guidanceScale, setGuidanceScale] = useState<number>(4);
   const { toast } = useToast()
 
   useEffect(() => {
@@ -95,14 +107,21 @@ export default function ImageGenerationPage() {
     }
 
     setIsGenerating(true)
-    setGeneratedImages([])
 
     try {
+      const selectedSize = IMAGE_SIZE_OPTIONS.find(option => option.value === imageSize);
+      const imageSizeParam = imageSize === 'custom'
+        ? { width: customWidth, height: customHeight }
+        : selectedSize
+          ? { width: selectedSize.width, height: selectedSize.height }
+          : { width: 768, height: 1024 }; // Default size
+
       const requestBody = {
         loraId: selectedLora.id,
         prompt,
         num_images: numImages,
-        image_size: imageSize,
+        image_size: imageSizeParam,
+        guidance_scale: guidanceScale,
       }
 
       console.log('Sending request to generate image:', requestBody)
@@ -124,11 +143,14 @@ export default function ImageGenerationPage() {
       console.log('Received response from generate-image:', data)
 
       if (data.images && data.images.length > 0) {
-        const imageUrls = data.images.map(img => img.url)
-        setGeneratedImages(imageUrls)
+        const newImages = data.images.map(img => ({
+          ...img,
+          timestamp: Date.now()
+        }));
+        setGeneratedImages(prevImages => [...newImages, ...prevImages]);
         toast({
           title: "Success",
-          description: `${imageUrls.length} image(s) generated successfully!`,
+          description: `${newImages.length} image(s) generated successfully!`,
         })
       } else {
         toast({
@@ -165,7 +187,7 @@ export default function ImageGenerationPage() {
           <AnimatePresence>
             {generatedImages.map((image, index) => (
               <motion.div
-                key={index}
+                key={`${image.url}-${image.timestamp}`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
@@ -173,7 +195,7 @@ export default function ImageGenerationPage() {
               >
                 <Card className="overflow-hidden bg-gray-800 border-gray-700">
                   <CardContent className="p-0">
-                    <img src={image} alt={`Generated image ${index + 1}`} className="w-full h-auto" />
+                    <img src={image.url} alt={`Generated image ${index + 1}`} className="w-full h-auto" />
                   </CardContent>
                 </Card>
               </motion.div>
@@ -233,6 +255,25 @@ export default function ImageGenerationPage() {
             </SelectContent>
           </Select>
 
+          {imageSize === 'custom' && (
+            <>
+              <Input
+                type="number"
+                placeholder="Width"
+                value={customWidth}
+                onChange={(e) => setCustomWidth(Number(e.target.value))}
+                className="w-20 bg-gray-800 border-gray-700 text-white"
+              />
+              <Input
+                type="number"
+                placeholder="Height"
+                value={customHeight}
+                onChange={(e) => setCustomHeight(Number(e.target.value))}
+                className="w-20 bg-gray-800 border-gray-700 text-white"
+              />
+            </>
+          )}
+
           <Select 
             onValueChange={(value) => setNumImages(parseInt(value))}
             value={numImages.toString()}
@@ -248,6 +289,14 @@ export default function ImageGenerationPage() {
               ))}
             </SelectContent>
           </Select>
+
+          <Input
+            type="number"
+            placeholder="Guidance Scale"
+            value={guidanceScale}
+            onChange={(e) => setGuidanceScale(Number(e.target.value))}
+            className="w-32 bg-gray-800 border-gray-700 text-white"
+          />
           
           <Button 
             onClick={handleGenerate} 

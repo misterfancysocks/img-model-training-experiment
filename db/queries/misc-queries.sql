@@ -17,3 +17,6 @@ select * from preprocessed_images pi;
  
 SELECT l.* FROM persons p
 JOIN loras l ON p.id = l.personId;
+
+SELECT * FROM generated_images gi 
+
