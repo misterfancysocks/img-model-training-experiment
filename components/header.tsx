@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { Ghost } from 'lucide-react';
 
 // Define a type for our user
 type User = {
@@ -47,93 +48,55 @@ const Header = () => {
   const isLoggedIn = true;
 
   return (
-    <header className="bg-gray-800 text-white p-4">
-      <nav className="container mx-auto flex justify-between items-center">
-        <Link href="/" className="text-xl font-bold">
-          Costumes App
+    <header className="fixed top-0 left-0 right-0 h-16 bg-gradient-to-b from-orange-900 to-black text-white flex items-center justify-between px-4 shadow-md z-50">
+      <div className="flex items-center">
+        <Ghost className="h-6 w-6 mr-2 text-white" />
+        <span className="text-xl text-white font-bold">halloweencostu.me</span>
+      </div>
+      <nav className="flex items-center space-x-4">
+        <Link href="/" className={`hover:text-orange-300 ${pathname === '/' ? 'font-bold text-orange-200' : ''}`}>
+          Home
         </Link>
-        <ul className="flex space-x-4 items-center">
-          <li>
-            <Link
-              href="/upload-and-crop"
-              className={`hover:text-gray-300 ${
-                pathname === '/upload-and-crop' ? 'underline' : ''
-              }`}
+        <Link href="/upload-and-crop" className={`hover:text-orange-300 ${pathname === '/upload-and-crop' ? 'font-bold text-orange-200' : ''}`}>
+          Upload & Crop
+        </Link>
+        <Link href="/pre-processing" className={`hover:text-orange-300 ${pathname === '/pre-processing' ? 'font-bold text-orange-200' : ''}`}>
+          Pre-processing
+        </Link>
+        <Link href="/lora-training" className={`hover:text-orange-300 ${pathname === '/lora-training' ? 'font-bold text-orange-200' : ''}`}>
+          LoRA Training
+        </Link>
+        <Link href="/image-generation" className={`hover:text-orange-300 ${pathname === '/image-generation' ? 'font-bold text-orange-200' : ''}`}>
+          Image Generation
+        </Link>
+        {isLoggedIn && (
+          <div className="relative">
+            <button
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className="flex items-center space-x-1 text-orange-100 hover:text-orange-300"
             >
-              Upload & Crop
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/pre-processing"
-              className={`hover:text-gray-300 ${
-                pathname === '/pre-processing' ? 'underline' : ''
-              }`}
-            >
-              Pre-processing
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/lora-training"
-              className={`hover:text-gray-300 ${
-                pathname === '/lora-training' ? 'underline' : ''
-              }`}
-            >
-              LoRA Training
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/image-generation"
-              className={`hover:text-gray-300 ${
-                pathname === '/image-generation' ? 'underline' : ''
-              }`}
-            >
-              Image Generation
-            </Link>
-          </li>
-          <li className="relative">
-            {isLoggedIn ? (
-              <div>
-                <button
-                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="flex items-center hover:text-gray-300"
-                >
-                  {selectedUser 
-                    ? `${selectedUser.firstName} ${selectedUser.lastName} (ID: ${selectedUser.id})`
-                    : 'Select User'}
-                  <ChevronDown className="ml-1 h-4 w-4" />
-                </button>
-                {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg py-1 z-10 max-h-60 overflow-y-auto">
-                    {users.map((user) => (
-                      <button
-                        key={user.id}
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setIsDropdownOpen(false);
-                          localStorage.setItem('selectedUserId', user.id.toString());
-                          console.log('Selected user:', user);
-                        }}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        {`${user.firstName} ${user.lastName} (ID: ${user.id})`}
-                      </button>
-                    ))}
-                  </div>
-                )}
+              <span>{selectedUser ? `${selectedUser.firstName} ${selectedUser.lastName}` : 'Select User'}</span>
+              <ChevronDown className="h-4 w-4" />
+            </button>
+            {isDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-orange-800 rounded-md shadow-lg py-1 z-10">
+                {users.map((user) => (
+                  <button
+                    key={user.id}
+                    className="block w-full text-left px-4 py-2 text-sm text-orange-100 hover:bg-orange-700"
+                    onClick={() => {
+                      setSelectedUser(user);
+                      setIsDropdownOpen(false);
+                      localStorage.setItem('selectedUserId', user.id.toString());
+                    }}
+                  >
+                    {user.firstName} {user.lastName}
+                  </button>
+                ))}
               </div>
-            ) : (
-              <Link
-                href="/login"
-                className="hover:text-gray-300"
-              >
-                Login
-              </Link>
             )}
-          </li>
-        </ul>
+          </div>
+        )}
       </nav>
     </header>
   );

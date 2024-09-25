@@ -2,8 +2,9 @@
 
 ## Storage Locations
 
-- **LoRA files**: `GCP_LORA_FILES_BUCKET_NAME=halloween-costume-loras`
+- **LoRA files**: `GCP_LORA_BUCKET_NAME=halloween-costume-loras`
 - **Generated images**: `GCP_USER_IMG_GENERATED_BUCKET_NAME=halloween-costume-generated-images`
+- **User uploaded images**: `GCP_USER_IMG_UPLOAD_BUCKET_NAME=halloween-costume-images`
 
 ## Overview
 
@@ -22,40 +23,25 @@ This document outlines the design and implementation of the image generation sys
 3. **LoRA Model Selection**:
    - Users select from existing LoRA models retrieved from the `loras` table in the database.
    - LoRA models are fetched via the `/api/get-lora-models` endpoint.
-   - Each model includes metadata such as `id`, `personId`, `url`, `firstName`, `lastName`, `trigger`, `model`, and `modelVersion`.
+   - Each model includes metadata such as `id`, `personId`, `firstName`, `lastName`, and `trigger`.
 
 4. **Number of Images**:
    - Users select the number of images to generate, ranging from **1 to 4**.
-
-5. **Image Size**:
-   - Users can select from predefined options or enter custom dimensions:
-     - **Predefined Options**:
-       - Square HD (512x512)
-       - Square (512x512)
-       - Portrait 4:3 (768x1024)
-       - Portrait 16:9 (896x504)
-       - Landscape 4:3 (1024x768)
-       - Landscape 16:9 (1280x720)
-     - **Custom Resolution**:
-       - Users can input custom width and height values.
-
-6. **Guidance Scale** (optional):
-   - Users can adjust the guidance scale, with a default value of 4.
 
 ## Outputs
 
 - **Generated Images**:
   - Newly generated images based on the user's input.
   - Previously generated images for the selected user, loaded lazily as the user scrolls.
-  - Metadata includes `width`, `height`, `content_type`, and storage details (`fullUrl`, `bucket`, `path`).
+  - Metadata includes `id`, `width`, `height`, `content_type`, and storage details (`fullUrl`, `signedUrl`, `bucket`, `path`).
 
 ## Process Overview
 
 ### 1. User Interface Interaction
 
-- The `ImageGenerationPage` component provides an interface for users to:
+- The `ImageGeneration` component provides an interface for users to:
   - Select their profile from the header dropdown.
-  - Select a LoRA model, enter a prompt, choose image settings, and generate new images.
+  - Select a LoRA model, enter a prompt, choose the number of images, and generate new images.
   - View both newly generated and previously generated images with lazy loading.
 
 ### 2. User Selection and Image History
@@ -76,9 +62,8 @@ This document outlines the design and implementation of the image generation sys
 
 - **Endpoint**: `GET /api/get-lora-models`
 - **Process**:
-  - Retrieves all LoRA models from the `loras` table in the database.
-  - For each model, generates a signed URL for the LoRA file stored in GCP.
-  - Returns a JSON array of LoRA models with an added `signedUrl` field.
+  - Retrieves LoRA models from the `loras` table in the database based on the user ID.
+  - Returns a JSON array of LoRA models.
 
 ### 5. Image Generation Process
 
@@ -88,12 +73,7 @@ This document outlines the design and implementation of the image generation sys
   {
     "prompt": "A portrait of johndoe in a haunted house.",
     "loraId": 1,
-    "num_images": 3,
-    "image_size": {
-      "width": 512,
-      "height": 1024
-    },
-    "guidance_scale": 4
+    "num_images": 3
   }
   ```
 
@@ -120,7 +100,7 @@ This document outlines the design and implementation of the image generation sys
 - **Authentication and Rate Limiting**:
   - Implemented on the `/api/generate-image` endpoint to prevent abuse.
 - **Signed URLs**:
-  - LoRA files and generated images are accessed via short-lived signed URLs.
+  - Generated images are accessed via short-lived signed URLs.
 - **Data Sanitization**:
   - User inputs (e.g., `prompt`) are sanitized to prevent injection attacks.
 
@@ -135,37 +115,14 @@ This document outlines the design and implementation of the image generation sys
 - **Parallel Processing**:
   - Backend handles multiple image generation requests in parallel.
 
-## Future Enhancements
-
-- **Custom Prompt Construction**:
-  - Add UI elements to help users construct prompts using predefined fields like age, gender, costume, etc.
-- **Negative Prompts Support**:
-  - Allow users to specify elements to exclude from the generated images.
-- **Queueing System Integration**:
-  - Implement a queue to handle a large number of simultaneous requests.
-- **User Authentication**:
-  - Implement user accounts to save and manage generated images.
-
-## Testing
-
-- **Frontend Testing**:
-  - Unit tests for components like prompt input, LoRA selection, and image display.
-  - Test cases for form validation and error handling.
-  - Test lazy loading functionality and scroll behavior.
-- **Backend Testing**:
-  - Unit tests for API endpoints `/api/get-lora-models`, `/api/generate-image`, and `/api/images/[userId]`.
-  - Mock external API calls to fal.ai and GCP.
-- **Integration Testing**:
-  - End-to-end tests covering the entire image generation flow, including user selection and lazy loading.
-
 ## Implementation Details
 
 ### Frontend
 
 - **Framework**: React with Next.js and TypeScript.
 - **Components**:
-  - **ImageGenerationPage**:
-    - Manages state for LoRA models, prompt, number of images, image size, and generated images.
+  - **ImageGeneration**:
+    - Manages state for LoRA models, prompt, number of images, and generated images.
     - Implements lazy loading using `react-intersection-observer`.
     - Handles user selection and localStorage for persisting user choice.
   - **UI Elements**:
@@ -177,11 +134,12 @@ This document outlines the design and implementation of the image generation sys
 - **Environment Variables**:
   - `FAL_KEY`: API key for fal.ai.
   - `GCP_PROJECT_ID`, `GCP_CLIENT_EMAIL`, `GCP_PRIVATE_KEY`: Credentials for GCP.
-  - `GCP_LORA_FILES_BUCKET_NAME`: Bucket name for LoRA files.
+  - `GCP_LORA_BUCKET_NAME`: Bucket name for LoRA files.
   - `GCP_USER_IMG_GENERATED_BUCKET_NAME`: Bucket name for generated images.
+  - `GCP_USER_IMG_UPLOAD_BUCKET_NAME`: Bucket name for user uploaded images.
 
 - **Endpoints**:
-  - `GET /api/get-lora-models`: Retrieves and processes LoRA models.
+  - `GET /api/get-lora-models`: Retrieves LoRA models for a specific user.
   - `POST /api/generate-image`: Handles image generation requests.
   - `GET /api/images/[userId]`: Fetches user-generated images with pagination support.
 
@@ -194,6 +152,11 @@ This document outlines the design and implementation of the image generation sys
   - `@google-cloud/storage` for interacting with GCP storage.
   - `react-intersection-observer` for implementing lazy loading.
 
+## Constants
+
+- **Default Image Size**: 768x1024 (portrait 4:3)
+- **Default Guidance Scale**: 3.5
+
 ## Conclusion
 
-The updated image generation system provides a robust, user-friendly interface with improved performance through lazy loading. It incorporates secure practices, detailed error handling, and efficient processing to ensure a smooth user experience. The backend is designed to handle various edge cases and integrates seamlessly with GCP services, while the frontend now offers a more responsive and efficient way of displaying large sets of generated images.
+The image generation system provides a robust, user-friendly interface with improved performance through lazy loading. It incorporates secure practices, detailed error handling, and efficient processing to ensure a smooth user experience. The backend is designed to handle various edge cases and integrates seamlessly with GCP services, while the frontend offers a responsive and efficient way of displaying large sets of generated images.

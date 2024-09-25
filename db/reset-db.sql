@@ -21,13 +21,13 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS persons (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  userId INTEGER,
   firstName TEXT NOT NULL,
   lastName TEXT NOT NULL,
   ethnicity TEXT NOT NULL,
   gender TEXT NOT NULL,
   birthdate DATE NOT NULL,
   trigger TEXT,
-  userId INTEGER,
   created_at DATETIME DEFAULT (datetime('now')),
   updated_at DATETIME DEFAULT (datetime('now')),
   FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE

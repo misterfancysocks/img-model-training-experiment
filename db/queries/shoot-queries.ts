@@ -294,3 +294,31 @@ export async function getPersonDataForShoot(shootId: number): Promise<PersonData
     await db.close();
   }
 }
+
+export async function getPersonDataForLora(db: Database, loraId: number) {
+  try {
+    const personData = await db.get(`
+      SELECT p.firstName, p.lastName, p.birthdate, p.gender, p.trigger
+      FROM persons p
+      JOIN loras l ON p.id = l.personId
+      WHERE l.id = ?
+    `, [loraId]);
+
+    if (personData) {
+      // Calculate age based on birthdate
+      const birthDate = new Date(personData.birthdate);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      personData.age = age;
+    }
+
+    return personData;
+  } catch (error) {
+    console.error('Error fetching person data for LoRA:', error);
+    throw error;
+  }
+}

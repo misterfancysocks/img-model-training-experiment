@@ -1,27 +1,11 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
-import { Providers } from "@/components/utilities/providers";
-import { Inter } from 'next/font/google';
 import Header from '@/components/header';
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
-});
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
-});
-
-const inter = Inter({ subsets: ['latin'] });
-
 export const metadata: Metadata = {
-  title: "Costumes App",
-  description: "Generate images of you in costumes",
+  title: "Halloween Costume Generator",
+  description: "Generate spooky and fun costume images with AI",
 };
 
 interface RootLayoutProps {
@@ -31,9 +15,10 @@ interface RootLayoutProps {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className="min-h-screen bg-gradient-to-b from-orange-900 to-black"> {/* Added background gradient */}
         <Header />
-        <main className="container mx-auto mt-8">{children}</main>
+        <main className="container mx-auto max-w-full mt-16 px-4 sm:px-6 lg:px-8">{children}</main> {/* Updated to full width and responsive padding */}
+        <Toaster />
       </body>
     </html>
   );

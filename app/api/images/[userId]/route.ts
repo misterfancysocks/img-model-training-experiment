@@ -26,7 +26,7 @@ export async function GET(
 
   try {
     const images = await db.all(`
-      SELECT gi.id, gi.fullUrl, gi.seed, gp.userInput, gp.fullPrompt, gi.bucket, gi.path
+      SELECT gi.id, gi.fullUrl, gi.seed, gp.userInput, gp.fullPrompt, gi.prompt,gi.bucket, gi.path
       FROM persons p
       JOIN loras l ON p.id = l.personId
       JOIN generated_images gi ON gi.loraId = l.id
