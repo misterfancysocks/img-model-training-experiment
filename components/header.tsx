@@ -29,7 +29,9 @@ const Header = () => {
         }
         const fetchedUsers = await response.json();
         setUsers(fetchedUsers);
+        console.log('Fetched users:', fetchedUsers);
       } catch (error) {
+        console.error('Error fetching users:', error);
         toast({
           title: "Error",
           description: "Failed to fetch users",
@@ -111,6 +113,8 @@ const Header = () => {
                         onClick={() => {
                           setSelectedUser(user);
                           setIsDropdownOpen(false);
+                          localStorage.setItem('selectedUserId', user.id.toString());
+                          console.log('Selected user:', user);
                         }}
                         className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       >

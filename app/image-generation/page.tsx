@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { useInView } from 'react-intersection-observer'
 
 interface LoraModel {
   id: number;
@@ -25,6 +26,9 @@ interface LoraModel {
 interface GenerateImageResponse {
   images: Array<{
     url: string;
+    fullUrl: string;
+    bucket: string;
+    path: string;
     width: number;
     height: number;
     content_type: string;
@@ -34,11 +38,23 @@ interface GenerateImageResponse {
 }
 
 interface GeneratedImage {
-  url: string;
+  signedUrl: string;
+  fullUrl: string;
   width: number;
   height: number;
   content_type: string;
   timestamp: number;
+  bucket: string;
+  path: string;
+}
+
+interface UserGeneratedImage {
+  id: number;
+  fullUrl: string;
+  signedUrl: string;
+  seed: number;
+  userInput: string;
+  fullPrompt: string;
 }
 
 const IMAGE_SIZE_OPTIONS = [
@@ -62,7 +78,12 @@ export default function ImageGenerationPage() {
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [guidanceScale, setGuidanceScale] = useState<number>(4);
+  const [userGeneratedImages, setUserGeneratedImages] = useState<UserGeneratedImage[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const { toast } = useToast()
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const { ref, inView } = useInView()
 
   useEffect(() => {
     const fetchLoraModels = async () => {
@@ -85,7 +106,82 @@ export default function ImageGenerationPage() {
     }
 
     fetchLoraModels()
-  }, [toast])
+
+    // Add a new effect to fetch the selected user ID from localStorage
+    const storedUserId = localStorage.getItem('selectedUserId');
+    console.log('Stored user ID:', storedUserId);
+    if (storedUserId) {
+      setSelectedUserId(storedUserId);
+      fetchUserGeneratedImages(storedUserId);
+    } else {
+      console.log('No stored user ID found');
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (inView && hasMore && selectedUserId) {
+      fetchUserGeneratedImages(selectedUserId, page + 1);
+    }
+  }, [inView, hasMore, selectedUserId]);
+
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'selectedUserId') {
+        const newUserId = e.newValue;
+        console.log('User ID changed:', newUserId);
+        setSelectedUserId(newUserId);
+        if (newUserId) {
+          setUserGeneratedImages([]);
+          setPage(1);
+          setHasMore(true);
+          fetchUserGeneratedImages(newUserId, 1);
+        } else {
+          console.log('Clearing user generated images due to null user ID');
+          setUserGeneratedImages([]);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // Immediate check and fetch
+    const currentUserId = localStorage.getItem('selectedUserId');
+    console.log('Current user ID on mount:', currentUserId);
+    if (currentUserId) {
+      setSelectedUserId(currentUserId);
+      fetchUserGeneratedImages(currentUserId);
+    }
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  const fetchUserGeneratedImages = useCallback(async (userId: string, pageNumber: number) => {
+    console.log('Fetching images for user:', userId, 'page:', pageNumber);
+    try {
+      const response = await fetch(`/api/images/${userId}?page=${pageNumber}&limit=10`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch user generated images');
+      }
+      const data: UserGeneratedImage[] = await response.json();
+      console.log('Fetched user generated images:', data);
+      
+      if (data.length === 0) {
+        setHasMore(false);
+      } else {
+        setUserGeneratedImages(prev => [...prev, ...data]);
+        setPage(pageNumber);
+      }
+    } catch (error) {
+      console.error('Error fetching user generated images:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch user generated images. Please try again later.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
 
   const handleGenerate = async () => {
     if (!selectedLora) {
@@ -143,9 +239,15 @@ export default function ImageGenerationPage() {
       console.log('Received response from generate-image:', data)
 
       if (data.images && data.images.length > 0) {
-        const newImages = data.images.map(img => ({
-          ...img,
-          timestamp: Date.now()
+        const newImages: GeneratedImage[] = data.images.map(img => ({
+          signedUrl: img.url, // Use the 'url' as 'signedUrl'
+          fullUrl: img.fullUrl,
+          width: img.width,
+          height: img.height,
+          content_type: img.content_type,
+          timestamp: Date.now(),
+          bucket: img.bucket,
+          path: img.path
         }));
         setGeneratedImages(prevImages => [...newImages, ...prevImages]);
         toast({
@@ -173,6 +275,8 @@ export default function ImageGenerationPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white p-8">
+      <p className="text-center mb-4">Current User ID: {selectedUserId || 'None'}</p>
+      
       <div className="container mx-auto p-4 pb-24">
         <h1 className="text-4xl font-bold text-center my-8 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
           LoRA Image Generator
@@ -185,9 +289,13 @@ export default function ImageGenerationPage() {
           transition={{ duration: 0.5 }}
         >
           <AnimatePresence>
-            {generatedImages.map((image, index) => (
+            {[...generatedImages, ...userGeneratedImages].sort((a, b) => {
+              const aTime = 'timestamp' in a ? a.timestamp : 0;
+              const bTime = 'timestamp' in b ? b.timestamp : 0;
+              return bTime - aTime;
+            }).map((image, index) => (
               <motion.div
-                key={`${image.url}-${image.timestamp}`}
+                key={`${image.signedUrl || image.fullUrl}-${index}`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
@@ -195,14 +303,29 @@ export default function ImageGenerationPage() {
               >
                 <Card className="overflow-hidden bg-gray-800 border-gray-700">
                   <CardContent className="p-0">
-                    <img src={image.url} alt={`Generated image ${index + 1}`} className="w-full h-auto" />
+                    <img 
+                      src={image.signedUrl || image.fullUrl} 
+                      alt={`Generated image ${index + 1}`} 
+                      className="w-full h-auto" 
+                      loading="lazy"
+                    />
+                    {'userInput' in image && (
+                      <div className="p-2 text-sm">
+                        <p><strong>Prompt:</strong> {image.userInput}</p>
+                        <p><strong>Seed:</strong> {image.seed}</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
             ))}
           </AnimatePresence>
         </motion.div>
-        <div ref={useRef<HTMLDivElement>(null)} />
+        {hasMore && (
+          <div ref={ref} className="flex justify-center mt-4">
+            <Loader2 className="h-8 w-8 animate-spin" />
+          </div>
+        )}
       </div>
 
       <motion.div 

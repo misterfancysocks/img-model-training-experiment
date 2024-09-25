@@ -167,7 +167,7 @@ export async function POST(request: Request) {
         const localFilePath = path.join(localDir, fileName);
         await fs.writeFile(localFilePath, Buffer.from(buffer));
 
-        const fullUrl = `${generatedImagesBucketName}/${fileName}`;
+        const fullUrl = `https://storage.googleapis.com/${generatedImagesBucketName}/${fileName}`;
 
         // Generate a signed URL for the uploaded image
         const [signedUrl] = await storage.bucket(generatedImagesBucketName).file(fileName).getSignedUrl({
@@ -177,8 +177,8 @@ export async function POST(request: Request) {
         });
 
         return {
-          url: signedUrl, // Return the signed URL instead of the direct GCS URL
-          fullUrl,
+          url: signedUrl, // This is the signed URL for immediate use
+          fullUrl, // This is the full GCS URL
           bucket: generatedImagesBucketName,
           path: fileName,
           width: image.width,
