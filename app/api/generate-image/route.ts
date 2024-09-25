@@ -27,7 +27,6 @@ interface GenerateImageRequest {
   loraId: number;
   prompt: string;
   num_images?: number;
-  image_size?: string;
 }
 
 interface FalImageResponse {
@@ -43,13 +42,16 @@ interface FalResponse {
   prompt: string;
 }
 
+const DEFAULT_IMAGE_SIZE = { width: 768, height: 1024 };
+const DEFAULT_GUIDANCE_SCALE = 3.5;
+
 export async function POST(request: Request) {
   let db;
   try {
     // Parse and validate the request body
-    const { loraId, prompt, num_images = 4, image_size = "portrait_4_3" } = await request.json() as GenerateImageRequest;
+    const { loraId, prompt, num_images = 4 } = await request.json() as GenerateImageRequest;
 
-    console.log('Received request:', { loraId, prompt, num_images, image_size });
+    console.log('Received request:', { loraId, prompt, num_images });
 
     if (!loraId || !prompt) {
       return NextResponse.json({ error: 'Missing required parameters: loraId and prompt are required.' }, { status: 400 });
@@ -107,7 +109,7 @@ export async function POST(request: Request) {
       prompt,
       loras: [{ path: signedUrl, scale: 1.0 }],
       num_images,
-      image_size,
+      image_size: DEFAULT_IMAGE_SIZE,
     });
 
     const result = await fal.subscribe("fal-ai/flux-lora", {
@@ -115,9 +117,9 @@ export async function POST(request: Request) {
         prompt,
         loras: [{ path: signedUrl, scale: 1.0 }],
         num_images,
-        image_size,
+        image_size: DEFAULT_IMAGE_SIZE,
         sync_mode: true,
-        guidance_scale: 4
+        guidance_scale: DEFAULT_GUIDANCE_SCALE
       },
       logs: true,
       onQueueUpdate: (update) => {

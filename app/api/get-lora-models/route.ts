@@ -29,13 +29,23 @@ const defaultBucketName = process.env.GCP_LORA_FILES_BUCKET_NAME;
  * - JSON array of LoRA models with an added 'signedUrl' field.
  */
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const userId = searchParams.get('userId');
+
+  if (!userId) {
+    return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+  }
+
   try {
-    // Open a connection to the SQLite database
     const db = await openDb();
 
-    // Fetch all LoRA models from the 'lora_models' table
-    const loraModels = await db.all('SELECT * FROM loras');
+    const loraModels = await db.all(`
+      SELECT l.id, l.personId, p.firstName, p.lastName, p.trigger
+      FROM loras l
+      JOIN persons p ON l.personId = p.id
+      WHERE p.userId = ?
+    `, userId);
 
     // Process each LoRA model to generate a signed URL
     const loraDetailsPromises = loraModels.map(async (model: any) => {

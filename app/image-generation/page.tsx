@@ -13,11 +13,6 @@ import { useInView } from 'react-intersection-observer'
 interface LoraModel {
   id: number;
   personId: number;
-  url: string;
-  trainedOn: string;
-  service: string;
-  model: string;
-  modelVersion: string;
   firstName: string;
   lastName: string;
   trigger: string;
@@ -57,27 +52,13 @@ interface UserGeneratedImage {
   fullPrompt: string;
 }
 
-const IMAGE_SIZE_OPTIONS = [
-  { label: 'Square HD (512x512)', value: 'square_hd', width: 512, height: 512 },
-  { label: 'Square (512x512)', value: 'square', width: 512, height: 512 },
-  { label: 'Portrait 4:3 (768x1024)', value: 'portrait_4_3', width: 768, height: 1024 },
-  { label: 'Portrait 16:9 (896x504)', value: 'portrait_16_9', width: 896, height: 504 },
-  { label: 'Landscape 4:3 (1024x768)', value: 'landscape_4_3', width: 1024, height: 768 },
-  { label: 'Landscape 16:9 (1280x720)', value: 'landscape_16_9', width: 1280, height: 720 },
-  { label: 'Custom', value: 'custom' },
-]
-
 export default function ImageGenerationPage() {
   const [loraModels, setLoraModels] = useState<LoraModel[]>([]);
   const [selectedLora, setSelectedLora] = useState<LoraModel | null>(null);
   const [prompt, setPrompt] = useState<string>("");
   const [numImages, setNumImages] = useState<number>(1);
-  const [imageSize, setImageSize] = useState<string>("portrait_4_3");
-  const [customWidth, setCustomWidth] = useState<number>(768);
-  const [customHeight, setCustomHeight] = useState<number>(1024);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [guidanceScale, setGuidanceScale] = useState<number>(4);
   const [userGeneratedImages, setUserGeneratedImages] = useState<UserGeneratedImage[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const { toast } = useToast()
@@ -88,7 +69,12 @@ export default function ImageGenerationPage() {
   useEffect(() => {
     const fetchLoraModels = async () => {
       try {
-        const response = await fetch('/api/get-lora-models')
+        const userId = localStorage.getItem('selectedUserId');
+        if (!userId) {
+          console.log('No user selected');
+          return;
+        }
+        const response = await fetch(`/api/get-lora-models?userId=${userId}`)
         if (!response.ok) {
           throw new Error('Failed to fetch LoRA models')
         }
@@ -107,12 +93,11 @@ export default function ImageGenerationPage() {
 
     fetchLoraModels()
 
-    // Add a new effect to fetch the selected user ID from localStorage
     const storedUserId = localStorage.getItem('selectedUserId');
     console.log('Stored user ID:', storedUserId);
     if (storedUserId) {
       setSelectedUserId(storedUserId);
-      fetchUserGeneratedImages(storedUserId);
+      fetchUserGeneratedImages(storedUserId, 1);
     } else {
       console.log('No stored user ID found');
     }
@@ -143,15 +128,6 @@ export default function ImageGenerationPage() {
     };
 
     window.addEventListener('storage', handleStorageChange);
-
-    // Immediate check and fetch
-    const currentUserId = localStorage.getItem('selectedUserId');
-    console.log('Current user ID on mount:', currentUserId);
-    if (currentUserId) {
-      setSelectedUserId(currentUserId);
-      fetchUserGeneratedImages(currentUserId);
-    }
-
     return () => {
       window.removeEventListener('storage', handleStorageChange);
     };
@@ -205,19 +181,10 @@ export default function ImageGenerationPage() {
     setIsGenerating(true)
 
     try {
-      const selectedSize = IMAGE_SIZE_OPTIONS.find(option => option.value === imageSize);
-      const imageSizeParam = imageSize === 'custom'
-        ? { width: customWidth, height: customHeight }
-        : selectedSize
-          ? { width: selectedSize.width, height: selectedSize.height }
-          : { width: 768, height: 1024 }; // Default size
-
       const requestBody = {
         loraId: selectedLora.id,
         prompt,
         num_images: numImages,
-        image_size: imageSizeParam,
-        guidance_scale: guidanceScale,
       }
 
       console.log('Sending request to generate image:', requestBody)
@@ -240,7 +207,7 @@ export default function ImageGenerationPage() {
 
       if (data.images && data.images.length > 0) {
         const newImages: GeneratedImage[] = data.images.map(img => ({
-          signedUrl: img.url, // Use the 'url' as 'signedUrl'
+          signedUrl: img.url,
           fullUrl: img.fullUrl,
           width: img.width,
           height: img.height,
@@ -349,7 +316,7 @@ export default function ImageGenerationPage() {
             <SelectContent className="bg-gray-800 border-gray-700 text-white">
               {loraModels.map(model => (
                 <SelectItem key={model.id} value={model.id.toString()}>
-                  {model.model} - {model.firstName} {model.lastName} ({model.trigger})
+                  {model.firstName} {model.lastName} ({model.trigger})
                 </SelectItem>
               ))}
             </SelectContent>
@@ -363,41 +330,6 @@ export default function ImageGenerationPage() {
           />
 
           <Select 
-            onValueChange={(value) => setImageSize(value)} 
-            value={imageSize}
-          >
-            <SelectTrigger className="w-full sm:w-[150px] bg-gray-800 border-gray-700 text-white">
-              <SelectValue placeholder="Image Size" />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700 text-white">
-              {IMAGE_SIZE_OPTIONS.map(option => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {imageSize === 'custom' && (
-            <>
-              <Input
-                type="number"
-                placeholder="Width"
-                value={customWidth}
-                onChange={(e) => setCustomWidth(Number(e.target.value))}
-                className="w-20 bg-gray-800 border-gray-700 text-white"
-              />
-              <Input
-                type="number"
-                placeholder="Height"
-                value={customHeight}
-                onChange={(e) => setCustomHeight(Number(e.target.value))}
-                className="w-20 bg-gray-800 border-gray-700 text-white"
-              />
-            </>
-          )}
-
-          <Select 
             onValueChange={(value) => setNumImages(parseInt(value))}
             value={numImages.toString()}
           >
@@ -405,21 +337,13 @@ export default function ImageGenerationPage() {
               <SelectValue placeholder="Num" />
             </SelectTrigger>
             <SelectContent className="bg-gray-800 border-gray-700 text-white">
-              {[1, 2, 3, 4, 5].map(num => (
+              {[1, 2, 3, 4].map(num => (
                 <SelectItem key={num} value={num.toString()}>
                   {num}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-
-          <Input
-            type="number"
-            placeholder="Guidance Scale"
-            value={guidanceScale}
-            onChange={(e) => setGuidanceScale(Number(e.target.value))}
-            className="w-32 bg-gray-800 border-gray-700 text-white"
-          />
           
           <Button 
             onClick={handleGenerate} 
