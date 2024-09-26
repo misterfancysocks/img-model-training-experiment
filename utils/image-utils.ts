@@ -49,17 +49,28 @@ export async function saveImage(base64Data: string, shootId: number, fileName: s
 export async function downsizeImage(base64: string, width: number = 800): Promise<string> {
   try {
     console.log('Downsizing image, input length:', base64.length);
-    const buffer = Buffer.from(base64, 'base64');
+    
+    // Remove the data URL prefix if present
+    const base64Data = base64.replace(/^data:image\/\w+;base64,/, "");
+    
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Detect the image format
+    const metadata = await sharp(buffer).metadata();
+    console.log('Image format:', metadata.format);
+
     const resizedBuffer = await sharp(buffer)
-      .resize({ width })
-      .jpeg() // Ensure output is JPEG
+      .resize({ width, withoutEnlargement: true })
+      .toFormat('jpeg') // Explicitly convert to JPEG
       .toBuffer();
-    const resizedBase64 = resizedBuffer.toString('base64');
+
+    const resizedBase64 = `data:image/jpeg;base64,${resizedBuffer.toString('base64')}`;
     console.log('Downsized image, output length:', resizedBase64.length);
     return resizedBase64;
   } catch (error) {
     console.error('Error in downsizeImage:', error);
-    throw error;
+    // If downsizing fails, return the original image
+    return `data:image/jpeg;base64,${base64}`;
   }
 }
 

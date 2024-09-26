@@ -1,27 +1,29 @@
-import { NextResponse } from 'next/server';
-import { savePreprocessedImageAction } from '@/actions/shoot-actions';
+import { NextRequest, NextResponse } from 'next/server';
+import { openDb } from '@/db/db';
 
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
+  const { personId, imageId, preprocessedUrl, caption, llm } = await req.json();
+  
+  const db = await openDb();
+
   try {
-    const { shootId, imageId, beforeFileName, afterFileName, preprocessedUrl, caption, llm } = await request.json();
-    
-    const result = await savePreprocessedImageAction(
-      shootId,
+    const result = await db.run(
+      `INSERT INTO preprocessed_images (personId, imageId, preprocessedUrl, caption, llm) 
+       VALUES (?, ?, ?, ?, ?)`,
+      personId,
       imageId,
-      beforeFileName,
-      afterFileName,
       preprocessedUrl,
       caption,
       llm
     );
 
-    if (result.status === 'success') {
-      return NextResponse.json(result.data);
-    } else {
-      return NextResponse.json({ error: result.message }, { status: 400 });
-    }
+    const savedImage = await db.get(`SELECT * FROM preprocessed_images WHERE id = ?`, result.lastID);
+
+    return NextResponse.json(savedImage);
   } catch (error) {
-    console.error('Error in save-preprocessed-image API route:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error('Error saving preprocessed image:', error);
+    return NextResponse.json({ error: 'Failed to save preprocessed image' }, { status: 500 });
+  } finally {
+    await db.close();
   }
 }

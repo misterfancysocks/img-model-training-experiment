@@ -7,13 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
 import { Loader2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
-import path from 'path';
-import { captionImageAction } from '@/actions/img-caption-actions';
 
-type Shoot = {
+type Person = {
   id: number;
-  name: string;
-  costume: string;
+  firstName: string;
+  lastName: string;
 };
 
 type ImageData = {
@@ -21,63 +19,64 @@ type ImageData = {
   fileName: string;
   originalUrl: string;
   croppedUrl?: string;
-  noBackgroundUrl?: string;
+  signedOriginalUrl?: string;
+  signedCroppedUrl?: string;
+};
+
+type PreprocessedImageData = {
+  id?: number;
+  imageId: number;
+  preprocessedUrl: string;
+  signedUrl?: string;
   caption?: string;
   llm?: string;
 };
 
 const PreProcessing = () => {
-  const [shoots, setShoots] = useState<Shoot[]>([]);
-  const [selectedShoot, setSelectedShoot] = useState<number | null>(null);
+  const [persons, setPersons] = useState<Person[]>([]);
+  const [selectedPerson, setSelectedPerson] = useState<number | null>(null);
   const [images, setImages] = useState<ImageData[]>([]);
+  const [preprocessedImages, setPreprocessedImages] = useState<PreprocessedImageData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [processingImages, setProcessingImages] = useState<Set<number>>(new Set());
 
   useEffect(() => {
-    const fetchShoots = async () => {
+    const fetchPersons = async () => {
       try {
-        const response = await fetch('/api/get-shoots');
-        if (!response.ok) throw new Error('Failed to fetch shoots');
+        const userId = localStorage.getItem('selectedUserId');
+        if (!userId) {
+          throw new Error('User ID not found');
+        }
+        const response = await fetch(`/api/get-persons?userId=${userId}`);
+        if (!response.ok) throw new Error('Failed to fetch persons');
         const data = await response.json();
-        setShoots(data);
+        setPersons(data);
       } catch (error) {
-        console.error('Error fetching shoots:', error);
+        console.error('Error fetching persons:', error);
         toast({
           title: "Error",
-          description: "Failed to fetch shoots. Please try again.",
+          description: "Failed to fetch persons. Please try again.",
           variant: "destructive",
         });
       }
     };
-    fetchShoots();
+    fetchPersons();
   }, []);
 
-  const fetchShootDetails = async (shootId: number) => {
+  const fetchPersonDetails = async (personId: number) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/get-shoot-details?id=${shootId}`);
-      if (!response.ok) throw new Error('Failed to fetch shoot details');
+      const response = await fetch(`/api/get-person-details?id=${personId}`);
+      if (!response.ok) throw new Error('Failed to fetch person details');
       const data = await response.json();
-      
-      // Check for preprocessed images
-      const updatedImages = await Promise.all(data.images.map(async (image: ImageData) => {
-        const baseFileName = path.basename(image.croppedUrl || image.originalUrl);
-        const preprocessedPath = `/assets/bg-removed/${shootId}/nobg_${baseFileName}`;
-        const preprocessedExists = await checkImageExists(preprocessedPath);
-        
-        if (preprocessedExists) {
-          return { ...image, noBackgroundUrl: preprocessedPath };
-        }
-        
-        return image;
-      }));
-      
-      setImages(updatedImages);
+      console.log('Received data from API:', data);
+      setImages(data.images);
+      setPreprocessedImages(data.preprocessedImages || []);
     } catch (error) {
-      console.error('Error fetching shoot details:', error);
+      console.error('Error fetching person details:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch shoot details. Please try again.",
+        description: "Failed to fetch person details. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -85,84 +84,49 @@ const PreProcessing = () => {
     }
   };
 
-  const checkImageExists = async (imagePath: string): Promise<boolean> => {
-    try {
-      const response = await fetch(imagePath, { method: 'HEAD' });
-      return response.ok;
-    } catch {
-      return false;
-    }
-  };
-
-  const handleShootSelect = (value: string) => {
-    const shootId = parseInt(value, 10);
-    setSelectedShoot(shootId);
-    fetchShootDetails(shootId);
-  };
-
-  const getBase64FromUrl = async (url: string): Promise<string> => {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+  const handlePersonSelect = (value: string) => {
+    const personId = parseInt(value, 10);
+    setSelectedPerson(personId);
+    fetchPersonDetails(personId);
   };
 
   const handleRemoveBackground = async () => {
-    if (!selectedShoot) return;
+    if (!selectedPerson) return;
 
-    const imagesToProcess = images.filter(img => !img.noBackgroundUrl || !img.caption);
+    const imagesToProcess = images.filter(img => !preprocessedImages.some(pImg => pImg.imageId === img.id));
     setProcessingImages(new Set(imagesToProcess.map(img => img.id)));
 
     try {
-      const imagePromises = imagesToProcess.map(async (image) => {
-        const imageUrl = image.croppedUrl || image.originalUrl;
-        const base64Data = await getBase64FromUrl(imageUrl);
-        const base64Image = base64Data.split(',')[1];
-
-        // Create a full URL for captioning
-        const fullImageUrl = new URL(imageUrl, window.location.origin).href;
-
-        // Run background removal and captioning in parallel
-        const [bgRemovalResult, captionResult] = await Promise.all([
-          fetch('/api/remove-background', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              images: [{ imageBase64: base64Image, imageUrl, id: image.id }],
-              shootId: selectedShoot.toString(),
-              provider: 'fal'
-            }),
-          }).then(res => res.json()),
-          captionImageAction(fullImageUrl, selectedShoot)
-        ]);
-        console.log('\x1b[36mpre-processing.tsx>handleRemoveBackground>captionResult.model:\x1b[0m', captionResult.model);
-
-        return {
-          ...image,
-          noBackgroundUrl: bgRemovalResult.outputUrls[0],
-          caption: captionResult.caption,
-          llm: captionResult.model
-        };
-
+      const response = await fetch('/api/pre-process-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          images: imagesToProcess.map(img => ({
+            imageUrl: img.croppedUrl || img.originalUrl,
+            id: img.id
+          })),
+          personId: selectedPerson.toString(),
+          provider: 'fal'
+        }),
       });
 
-      const processedImages = await Promise.all(imagePromises);
+      if (!response.ok) {
+        throw new Error('Failed to process images');
+      }
 
-      setImages(prevImages => prevImages.map(img => {
-        const processedImg = processedImages.find(pImg => pImg.id === img.id);
-        return processedImg || img;
-      }));
+      const result = await response.json();
+      const newPreprocessedImages = result.outputUrls;
 
-      console.log('\x1b[36mpre-processing.tsx>handleRemoveBackground>result:\x1b[0m');
-      console.log(processedImages);
+      console.log('New preprocessed images:', newPreprocessedImages);
+      setPreprocessedImages(prevImages => {
+        const updatedImages = [...prevImages, ...newPreprocessedImages];
+        console.log('Updated preprocessed images:', updatedImages);
+        return updatedImages;
+      });
 
       toast({
         title: "Success",
-        description: `Processed ${processedImages.length} images`,
+        description: `Processed ${newPreprocessedImages.length} images`,
       });
 
     } catch (error) {
@@ -178,43 +142,44 @@ const PreProcessing = () => {
   };
 
   const handleSave = async () => {
-    if (!selectedShoot) return;
+    if (!selectedPerson) return;
 
     try {
-      const preprocessedImages = images.filter(img => img.noBackgroundUrl);
+      const unsavedImages = preprocessedImages.filter(img => !img.id);
+      console.log('Unsaved images:', unsavedImages);
       
-      for (const img of preprocessedImages) {
-        const beforeFileName = img.croppedUrl ? path.basename(img.croppedUrl) : path.basename(img.originalUrl);
-        const afterFileName = path.basename(img.noBackgroundUrl as string);
-        
-        console.log('\x1b[36mpre-processing.tsx>handleSave>img.llm:\x1b[0m', img.llm);
+      const savedImages = await Promise.all(unsavedImages.map(async (img) => {
         const response = await fetch('/api/save-preprocessed-image', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            shootId: selectedShoot,
-            imageId: img.id,
-            beforeFileName,
-            afterFileName,
-            preprocessedUrl: img.noBackgroundUrl,
+            personId: selectedPerson,
+            imageId: img.imageId,
+            preprocessedUrl: img.preprocessedUrl,
             caption: img.caption,
             llm: img.llm,
           }),
         });
 
         if (!response.ok) {
-          throw new Error(`Failed to save preprocessed image: ${img.fileName}`);
+          throw new Error(`Failed to save preprocessed image: ${img.imageId}`);
         }
-      }
 
-      // Refresh the images state to reflect the saved changes
-      await fetchShootDetails(selectedShoot);
+        const savedImage = await response.json();
+        return savedImage;
+      }));
+
+      console.log('Saved images:', savedImages);
+      setPreprocessedImages(prevImages => prevImages.map(img => {
+        const savedImg = savedImages.find(sImg => sImg.imageId === img.imageId);
+        return savedImg ? savedImg : img;
+      }));
 
       toast({
         title: "Success",
-        description: `${preprocessedImages.length} preprocessed images have been saved.`,
+        description: `${savedImages.length} preprocessed images have been saved.`,
       });
     } catch (error) {
       console.error('Error saving preprocessed images:', error);
@@ -227,22 +192,27 @@ const PreProcessing = () => {
   };
 
   const getImageUrl = (image: ImageData) => {
-    if (image.noBackgroundUrl) return image.noBackgroundUrl;
-    return image.croppedUrl || image.originalUrl;
+    const preprocessed = preprocessedImages.find(pImg => pImg.imageId === image.id);
+    return preprocessed?.signedUrl || 
+           image.signedCroppedUrl || 
+           image.signedOriginalUrl || 
+           image.croppedUrl || 
+           image.originalUrl;
   };
 
+  console.log(preprocessedImages)
   return (
     <div className="flex h-screen">
       <div className="w-1/4 p-4 border-r">
-        <h2 className="text-xl font-bold mb-4">Select Shoot</h2>
-        <Select onValueChange={handleShootSelect}>
+        <h2 className="text-xl font-bold mb-4">Select Person</h2>
+        <Select onValueChange={handlePersonSelect}>
           <SelectTrigger>
-            <SelectValue placeholder="Select a shoot" />
+            <SelectValue placeholder="Select a person" />
           </SelectTrigger>
           <SelectContent>
-            {shoots.map((shoot) => (
-              <SelectItem key={shoot.id} value={shoot.id.toString()}>
-                {shoot.name} - {shoot.costume}
+            {persons.map((person) => (
+              <SelectItem key={person.id} value={person.id.toString()}>
+                {person.firstName} {person.lastName}
               </SelectItem>
             ))}
           </SelectContent>
@@ -266,6 +236,7 @@ const PreProcessing = () => {
                         fill
                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                         className="object-contain rounded-md"
+                        unoptimized
                       />
                       {processingImages.has(image.id) && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
@@ -282,8 +253,12 @@ const PreProcessing = () => {
                         fill
                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                         className="object-contain rounded-md"
+                        unoptimized
                       />
                     </div>
+                    {preprocessedImages.find(pImg => pImg.imageId === image.id)?.caption && (
+                      <p className="mt-2">Caption: {preprocessedImages.find(pImg => pImg.imageId === image.id)?.caption}</p>
+                    )}
                   </DialogContent>
                 </Dialog>
               ))}
@@ -291,7 +266,7 @@ const PreProcessing = () => {
             <div className="mt-4 flex justify-between">
               <Button 
                 onClick={handleRemoveBackground} 
-                disabled={!selectedShoot || processingImages.size > 0}
+                disabled={!selectedPerson || processingImages.size > 0}
               >
                 {processingImages.size > 0 ? (
                   <>
@@ -302,7 +277,7 @@ const PreProcessing = () => {
                   'Remove Background'
                 )}
               </Button>
-              <Button onClick={handleSave} disabled={!selectedShoot}>Save</Button>
+              <Button onClick={handleSave} disabled={!selectedPerson}>Save</Button>
             </div>
           </>
         )}

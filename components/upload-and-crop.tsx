@@ -1,52 +1,39 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Crop as CropIcon, Wand2, RotateCcw, Trash2, RotateCw } from "lucide-react";
+import { Upload, Crop as CropIcon, Wand2, Trash2, RotateCw } from "lucide-react";
 import ReactCrop, { Crop, PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
+import { useToast } from "@/hooks/use-toast";
 
 interface PersonData {
   id?: number;
   firstName: string;
   lastName: string;
-  ethnicity: 'white' | 'latino' | 'black' | 'asian';
-  gender: 'male' | 'female';
-  age: number;
-}
-
-interface ShootData {
-  id?: number;
-  name: string;
-  costumeGender: 'male' | 'female' | 'neither';
-  costume: string;
-  backdrop?: string;
+  ethnicity: 'white' | 'latino' | 'black' | 'asian' | 'not_specified';
+  gender: 'male' | 'female' | 'not_specified';
+  birthdate: string;
 }
 
 interface ImageData {
-  original: string; // This is the base64 string for the original image, ex. 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...'
-  cropped?: string; // This is the base64 string for the cropped image, ex. 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...'
-  fileName: string; // This is the original file name of the image, ex. 'my-photo.jpg'
-  uploadedUrl?: string; // This will be set after uploading to the server. This appears to be used in handleDelete to identify which file to delete.
+  original: string;
+  cropped?: string;
+  fileName: string;
 }
 
-export function UploadAndCrop(): JSX.Element {
+export const UploadAndCrop: React.FC = () => {
   const [images, setImages] = useState<ImageData[]>([]);
   const [personData, setPersonData] = useState<PersonData>({
     firstName: '',
     lastName: '',
-    ethnicity: 'white',
-    gender: 'male',
-    age: 0
-  });
-  const [shootData, setShootData] = useState<ShootData>({
-    name: '',
-    costume: '',
-    costumeGender: 'male'
+    ethnicity: 'not_specified',
+    gender: 'not_specified',
+    birthdate: '',
   });
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [crop, setCrop] = useState<Crop>();
@@ -54,68 +41,50 @@ export function UploadAndCrop(): JSX.Element {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentCropIndex, setCurrentCropIndex] = useState<number | null>(null);
   const [shootError, setShootError] = useState<string | null>(null);
-  const [shoots, setShoots] = useState<ShootData[]>([]);
-  const [selectedShootId, setSelectedShootId] = useState<string>('new');
   const [tempCrop, setTempCrop] = useState<Crop>();
+  const { toast } = useToast();
 
-  // Triggers the hidden file input when the upload button is clicked
   const handleUploadClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
   }
 
-  // Handles file upload, creates base64 strings for preview, and updates the images state
-  // Here we remove all spaces in the file name.
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.files) return;
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    
-    Array.from(files).forEach(file => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        const modifiedFileName = `${file.name.replace(/ /g, '')}`;
-        console.log('\x1b[36mupload-and-crop.tsx>handleFileUpload>modifiedFileName:\x1b[0m');
-        console.log(modifiedFileName);
+    if (files) {
+      const filePromises = Array.from(files).map(file => {
+        return new Promise<ImageData>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            resolve({
+              original: reader.result as string,
+              fileName: file.name.replace(/ /g, '_'),
+            });
+          };
+          reader.onerror = () => {
+            reject(new Error('Failed to read file'));
+          };
+          reader.readAsDataURL(file);
+        });
+      });
 
-        setImages(prevImages => [...prevImages, {
-          original: base64String,
-          fileName: modifiedFileName,
-        }]);
-      };
-      reader.readAsDataURL(file);
-    });
-    
-    event.target.value = ''; // Reset input to allow uploading the same file again
-  }
-
-  // Fetches existing shoots from the server
-  const fetchShoots = async () => {
-    try {
-      const response = await fetch('/api/get-shoots');
-      if (response.ok) {
-        const data = await response.json();
-        setShoots(data);
-      } else {
-        const errorData = await response.json();
-        setShootError(errorData.error || 'Failed to fetch shoots');
+      try {
+        const newImages = await Promise.all(filePromises);
+        setImages(prevImages => [...prevImages, ...newImages]);
+      } catch (error) {
+        console.error('Error reading files:', error);
+        toast({
+          title: "Error",
+          description: "Failed to read one or more files.",
+          variant: "destructive",
+        });
       }
-    } catch (error) {
-      console.error('Error fetching shoots:', error);
-      setShootError('An error occurred while fetching shoots');
     }
   }
 
-  // Fetch shoots on component mount
-  useEffect(() => {
-    fetchShoots();
-  }, []);
-
-  // Handles the completion of a crop operation
   const handleCropComplete = useCallback((pixelCrop: PixelCrop) => {
     if (currentCropIndex !== null && imgRef.current && pixelCrop.width && pixelCrop.height) {
-      // Create a canvas to draw the cropped image
       const canvas = document.createElement('canvas');
       const scaleX = imgRef.current.naturalWidth / imgRef.current.width;
       const scaleY = imgRef.current.naturalHeight / imgRef.current.height;
@@ -124,7 +93,6 @@ export function UploadAndCrop(): JSX.Element {
       const ctx = canvas.getContext('2d');
 
       if (ctx) {
-        // Draw the cropped portion of the image onto the canvas
         ctx.drawImage(
           imgRef.current,
           pixelCrop.x * scaleX,
@@ -137,17 +105,18 @@ export function UploadAndCrop(): JSX.Element {
           pixelCrop.height * scaleY
         );
 
-        // Convert the canvas to a base64 string
         const base64Cropped = canvas.toDataURL('image/jpeg');
-        // Update the images state with the cropped version
         setImages(prev =>
           prev.map((img, index) =>
             index === currentCropIndex
-              ? { ...img, cropped: base64Cropped }
+              ? { 
+                  ...img, 
+                  cropped: base64Cropped,
+                  fileName: img.fileName 
+                }
               : img
           )
         );
-        // Reset crop-related states
         setCurrentCropIndex(null);
         setCrop(undefined);
         setTempCrop(undefined);
@@ -155,175 +124,99 @@ export function UploadAndCrop(): JSX.Element {
     }
   }, [currentCropIndex]);
 
-  // Reverts a cropped image to its original state
   const handleRevert = (index: number) => {
     setImages(prev => prev.map((img, i) => 
       i === index ? { original: img.original, fileName: img.fileName } : img
     ));
   }
 
-  // Handles form submission, including saving or updating shoot data
+  const isFormValid = () => {
+    return (
+      personData.firstName.trim() !== '' &&
+      personData.lastName.trim() !== '' &&
+      personData.ethnicity !== 'not_specified' &&
+      personData.gender !== 'not_specified' &&
+      personData.birthdate !== '' &&
+      images.length > 0
+    );
+  };
+
   const handleSubmit = async () => {
+    if (!isFormValid()) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields and upload at least one image.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (isSubmitting) return;
     setIsSubmitting(true);
 
     try {
-      // Log the header in cyan
       console.log('\x1b[36mupload-and-crop.tsx handleSubmit()\x1b[0m');
 
-      // Helper function to safely truncate strings or URLs
-      const truncate = (str: string, length: number) => {
-        if (str.startsWith('data:')) {
-          // It's a base64 string, truncate after the comma
-          const base64Part = str.split(',')[1];
-          return base64Part ? base64Part.substring(0, length) + '...' : 'Invalid base64';
-        } else if (str.startsWith('blob:')) {
-          // It's a blob URL, return as is
-          return str;
-        } else {
-          // It's a regular string, truncate normally
-          return str.substring(0, length) + '...';
-        }
+      const payload = {
+        personData,
+        images: images.map(img => ({
+          fileName: img.fileName,
+          original: img.original,
+          cropped: img.cropped || null,
+        }))
       };
-
-      // Prepare image data for logging
-      const imagesToLog = images.map((img) => ({
-        fileName: img.fileName,
-        originalImg: truncate(img.original, 30),
-        croppedImg: img.cropped ? truncate(img.cropped, 30) : undefined,
-      }));
-
-      // Log the truncated image data
-      console.log('Images to save:', JSON.stringify(imagesToLog, null, 2));
-
-      // Prepare the full image data for submission
-      const fullImagesToSave = images.map((img) => ({
-        fileName: img.fileName,
-        originalImg: img.original,
-        croppedImg: img.cropped,
-      }));
-
-      // Determine the endpoint based on whether it's a new shoot or an update
-      const endpoint = selectedShootId === 'new' ? '/api/save-shoot-base64' : `/api/update-shoot/${selectedShootId}`;
-      const response = await fetch(endpoint, {
+      console.log('\x1b[36mupload-and-crop.tsx handleSubmit() payload\x1b[0m', payload);
+      
+      const response = await fetch('/api/upload-user-images', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          person: personData,
-          shoot: shootData,
-          images: fullImagesToSave
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
-      // Handle response and errors
       if (!response.ok) {
-        const contentType = response.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to save data');
-        } else {
-          const errorText = await response.text();
-          throw new Error(`Server error: ${response.status} ${response.statusText}. Details: ${errorText}`);
-        }
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload images');
       }
 
       const result = await response.json();
-      console.log('Saved data:', result);
-      // Reset form and provide feedback
+      console.log('Uploaded images:', result);
+      
+      setPersonData(prevData => ({
+        ...prevData,
+        id: result.personId
+      }));
+
+      toast({
+        title: "Success",
+        description: "Images uploaded successfully!",
+      });
+
+      // Reset form after successful submission
       setPersonData({
         firstName: '',
         lastName: '',
-        ethnicity: 'white',
-        gender: 'male',
-        age: 0
-      });
-      setShootData({
-        name: '',
-        costume: '',
-        costumeGender: 'male'
+        ethnicity: 'not_specified',
+        gender: 'not_specified',
+        birthdate: '',
       });
       setImages([]);
-      setSelectedShootId('new');
-      fetchShoots(); // Refresh the shoots list
-      // Add a success message here
     } catch (error) {
-      console.error('Error saving data:', error);
-      setShootError(error instanceof Error ? error.message : 'An error occurred while saving the data');
+      console.error('Error uploading images:', error);
+      setShootError(error instanceof Error ? error.message : 'An error occurred while uploading images');
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'An error occurred while uploading images',
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  // Fetches an image and converts it to a base64 string
-  const fetchImageAsBase64 = async (url: string): Promise<string> => {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  // Handles selection of an existing shoot or creation of a new one
-  const handleShootSelect = async (value: string) => {
-    setSelectedShootId(value);
-    if (value === 'new') {
-      // Reset form for new shoot
-      setPersonData({
-        firstName: '',
-        lastName: '',
-        ethnicity: 'white',
-        gender: 'male',
-        age: 0
-      });
-      setShootData({ name: '', costume: '', costumeGender: 'male' });
-      setImages([]);
-    } else {
-      try {
-        // Fetch and populate form with existing shoot data
-        const response = await fetch(`/api/get-shoot-details?id=${value}`);
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch shoot details');
-        }
-        const data = await response.json();
-        setPersonData(data.person);
-        setShootData(data.shoot);
-
-        // Convert image URLs to base64
-        const convertedImages = await Promise.all(data.images.map(async (img: any) => {
-          const originalBase64 = await fetchImageAsBase64(img.originalUrl);
-          let croppedBase64;
-          if (img.croppedUrl) {
-            croppedBase64 = await fetchImageAsBase64(img.croppedUrl);
-          }
-          return {
-            fileName: img.fileName,
-            original: originalBase64,
-            cropped: croppedBase64,
-          };
-        }));
-
-        setImages(convertedImages);
-      } catch (error) {
-        console.error('Error fetching shoot details:', error);
-        setShootError('An error occurred while fetching shoot details');
-        // Reset the selected shoot to 'new' if there's an error
-        setSelectedShootId('new');
-      }
-    }
-  };
-
-  // Updates the crop state as the user adjusts the crop area
   const handleCropChange = (newCrop: Crop) => {
     setTempCrop(newCrop);
   };
 
-  // New function to handle crop confirmation
   const handleCropConfirm = () => {
     if (currentCropIndex !== null && imgRef.current && tempCrop) {
       const pixelCrop: PixelCrop = {
@@ -337,10 +230,9 @@ export function UploadAndCrop(): JSX.Element {
     }
   };
 
-  // Handles deletion of an image, including server-side deletion if applicable
   const handleDelete = async (index: number) => {
     const imageToDelete = images[index];
-    if (selectedShootId !== 'new' && imageToDelete.uploadedUrl) {
+    if (personData.id) {
       try {
         const response = await fetch('/api/delete-image', {
           method: 'POST',
@@ -348,8 +240,8 @@ export function UploadAndCrop(): JSX.Element {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ 
-            shootId: selectedShootId, 
-            imageUrl: imageToDelete.uploadedUrl 
+            personId: personData.id, 
+            fileName: imageToDelete.fileName 
           }),
         });
 
@@ -364,30 +256,23 @@ export function UploadAndCrop(): JSX.Element {
       }
     }
 
-    // Remove the image from the local state
     setImages(prev => prev.filter((_, i) => i !== index));
   }
 
-  // Handles rotation of an image
   const handleRotate = (index: number) => {
     setImages(prev => prev.map((img, i) => {
       if (i === index) {
-        // Create a canvas to perform the rotation
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const image = new Image();
         image.src = img.cropped || img.original;
         image.onload = () => {
-          // Set canvas dimensions to fit the rotated image
           canvas.width = image.height;
           canvas.height = image.width;
-          // Perform the rotation
           ctx?.translate(canvas.width / 2, canvas.height / 2);
           ctx?.rotate(90 * Math.PI / 180);
           ctx?.drawImage(image, -image.width / 2, -image.height / 2);
-          // Convert the rotated image to a data URL
           const rotatedImage = canvas.toDataURL('image/jpeg');
-          // Update the images state with the rotated image
           setImages(prev => prev.map((img, idx) => 
             idx === index ? { ...img, cropped: rotatedImage } : img
           ));
@@ -425,9 +310,10 @@ export function UploadAndCrop(): JSX.Element {
               onValueChange={(value) => setPersonData({...personData, ethnicity: value as PersonData['ethnicity']})}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select ethnicity" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="not_specified">Select one</SelectItem>
                 <SelectItem value="white">White</SelectItem>
                 <SelectItem value="latino">Latino</SelectItem>
                 <SelectItem value="black">Black</SelectItem>
@@ -442,69 +328,23 @@ export function UploadAndCrop(): JSX.Element {
               onValueChange={(value) => setPersonData({...personData, gender: value as PersonData['gender']})}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select gender" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="not_specified">Select one</SelectItem>
                 <SelectItem value="male">Male</SelectItem>
                 <SelectItem value="female">Female</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label htmlFor="age">Age</Label>
+            <Label htmlFor="birthdate">Birthdate</Label>
             <Input
-              id="age"
-              type="number"
-              value={personData.age}
-              onChange={(e) => setPersonData({...personData, age: parseInt(e.target.value) || 0})}
+              id="birthdate"
+              type="date"
+              value={personData.birthdate}
+              onChange={(e) => setPersonData({...personData, birthdate: e.target.value})}
             />
-          </div>
-        </div>
-
-        <h2 className="text-2xl font-bold mt-8 mb-4">Shoot Information</h2>
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="shootSelect">Select Existing Shoot (Optional)</Label>
-            <Select
-              value={selectedShootId}
-              onValueChange={handleShootSelect}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a shoot" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="new">Create New Shoot</SelectItem>
-                {shoots.map(shoot => (
-                  <SelectItem key={shoot.id} value={shoot.id?.toString() || ''}>
-                    {shoot.name} - {shoot.costume}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="costume">Costume</Label>
-            <Input
-              id="costume"
-              value={shootData.costume}
-              onChange={(e) => setShootData({...shootData, costume: e.target.value})}
-            />
-          </div>
-          <div>
-            <Label htmlFor="costumeGender">Costume Gender</Label>
-            <Select
-              value={shootData.costumeGender}
-              onValueChange={(value) => setShootData({...shootData, costumeGender: value as ShootData['costumeGender']})}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select costume gender" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="male">Male</SelectItem>
-                <SelectItem value="female">Female</SelectItem>
-                <SelectItem value="neither">Neither</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
       </div>
@@ -607,7 +447,7 @@ export function UploadAndCrop(): JSX.Element {
                     setCurrentCropIndex(null);
                     setTempCrop(undefined);
                   }} 
-                  variant="outline" 
+                  variant="secondary"
                   className="mr-2"
                 >
                   Cancel
@@ -631,7 +471,7 @@ export function UploadAndCrop(): JSX.Element {
           <Button 
             onClick={handleSubmit} 
             className="bg-purple-600 hover:bg-purple-700"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !isFormValid()}
           >
             <Wand2 className="mr-2 h-4 w-4" /> 
             {isSubmitting ? 'Processing...' : 'Submit'}

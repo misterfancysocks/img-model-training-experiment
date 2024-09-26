@@ -47,32 +47,32 @@ BEGIN
    WHERE id = NEW.id;
 END;
 
-CREATE TABLE IF NOT EXISTS shoots (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  costumeGender TEXT NOT NULL,
-  costume TEXT NOT NULL,
-  backdrop TEXT,
-  personId INTEGER,
-  created_at DATETIME DEFAULT (datetime('now')),
-  updated_at DATETIME DEFAULT (datetime('now')),
-  FOREIGN KEY (personId) REFERENCES persons(id) ON DELETE SET NULL
-);
+-- We have gotten rid of shoots and are in the process of removing it from the database and our logic.
+-- CREATE TABLE IF NOT EXISTS shoots (
+--   id INTEGER PRIMARY KEY AUTOINCREMENT,
+--   name TEXT NOT NULL,
+--   costumeGender TEXT NOT NULL,
+--   costume TEXT NOT NULL,
+--   backdrop TEXT,
+--   personId INTEGER,
+--   created_at DATETIME DEFAULT (datetime('now')),
+--   updated_at DATETIME DEFAULT (datetime('now')),
+--   FOREIGN KEY (personId) REFERENCES persons(id) ON DELETE SET NULL
+-- );
 
 CREATE TABLE IF NOT EXISTS images (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  shootId INTEGER NOT NULL,
+  personId INTEGER NOT NULL,
   fileName TEXT NOT NULL,
   originalUrl TEXT NOT NULL,
   croppedUrl TEXT,
   created_at DATETIME DEFAULT (datetime('now')),
   updated_at DATETIME DEFAULT (datetime('now')),
-  FOREIGN KEY (shootId) REFERENCES shoots(id) ON DELETE CASCADE
+  FOREIGN KEY (personId) REFERENCES persons(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS preprocessed_images (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  shootId INTEGER NOT NULL,
   imageId INTEGER NOT NULL,
   beforeFileName TEXT NOT NULL,
   afterFileName TEXT NOT NULL,
@@ -81,7 +81,6 @@ CREATE TABLE IF NOT EXISTS preprocessed_images (
   llm TEXT,
   created_at DATETIME DEFAULT (datetime('now')),
   updated_at DATETIME DEFAULT (datetime('now')),
-  FOREIGN KEY (shootId) REFERENCES shoots(id) ON DELETE CASCADE,
   FOREIGN KEY (imageId) REFERENCES images(id) ON DELETE CASCADE
 );
 
@@ -122,7 +121,6 @@ CREATE TABLE IF NOT EXISTS p_backgrounds (
 CREATE TABLE IF NOT EXISTS generation_prompts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   personId INTEGER NOT NULL,
-  shootId INTEGER NOT NULL,
   loraId INTEGER NOT NULL,
   userInput TEXT NOT NULL,
   backgroundId INTEGER NOT NULL,
@@ -133,7 +131,6 @@ CREATE TABLE IF NOT EXISTS generation_prompts (
   created_at DATETIME DEFAULT (datetime('now')),
   updated_at DATETIME DEFAULT (datetime('now')),
   FOREIGN KEY (personId) REFERENCES persons(id) ON DELETE CASCADE,
-  FOREIGN KEY (shootId) REFERENCES shoots(id) ON DELETE CASCADE,
   FOREIGN KEY (loraId) REFERENCES loras(id) ON DELETE CASCADE,
   FOREIGN KEY (backgroundId) REFERENCES p_backgrounds(id) ON DELETE CASCADE,
   FOREIGN KEY (generatedImageId) REFERENCES generated_images(id) ON DELETE SET NULL

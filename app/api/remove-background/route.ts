@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as fal from "@fal-ai/serverless-client";
 import Replicate from "replicate";
-import fs from 'fs/promises';
-import path from 'path';
+import { Storage } from '@google-cloud/storage';
 
 // Configure fal client with the API key from environment variables
 fal.config({
@@ -14,24 +13,33 @@ const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
 });
 
+// Initialize Google Cloud Storage
+const storage = new Storage({
+  projectId: process.env.GCP_PROJECT_ID,
+  credentials: {
+    client_email: process.env.GCP_CLIENT_EMAIL,
+    private_key: process.env.GCP_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  },
+});
+
+const userImgBucket = storage.bucket(process.env.GCP_USER_IMG_UPLOAD_BUCKET_NAME || '');
+
 export async function POST(req: NextRequest) {
   try {
-    const { images, shootId, provider = 'replicate' } = await req.json();
+    const { images, personId, provider = 'replicate' } = await req.json();
 
-    if (!images || !Array.isArray(images) || images.length === 0 || !shootId) {
-      return NextResponse.json({ error: 'No images or shoot ID provided' }, { status: 400 });
+    if (!images || !Array.isArray(images) || images.length === 0 || !personId) {
+      return NextResponse.json({ error: 'No images or person ID provided' }, { status: 400 });
     }
 
-    // Add a check to ensure the API key is set
-    if (!process.env.FAL_KEY) {
-      throw new Error('FAL_KEY is not set in environment variables');
-    }
+    const processImage = async (image: { imageUrl: string; id: number }) => {
+      // Download image from GCP
+      const [imageBuffer] = await userImgBucket.file(image.imageUrl).download();
 
-    const processImage = async (image: { imageBase64: string; imageUrl: string }) => {
       if (provider === 'fal') {
-        return handleFalRemoveBackground(image.imageBase64, image.imageUrl, shootId);
+        return handleFalRemoveBackground(imageBuffer, image.imageUrl, personId, image.id);
       } else {
-        return handleReplicateRemoveBackground(image.imageBase64, image.imageUrl, shootId);
+        return handleReplicateRemoveBackground(imageBuffer, image.imageUrl, personId, image.id);
       }
     };
 
@@ -44,10 +52,8 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function handleFalRemoveBackground(imageBase64: string, imageUrl: string, shootId: string) {
-  const buffer = Buffer.from(imageBase64, 'base64');
-  const file = new File([buffer], path.basename(imageUrl), { type: 'image/png' });
-
+async function handleFalRemoveBackground(imageBuffer: Buffer, imageUrl: string, personId: string, imageId: number) {
+  const file = new File([imageBuffer], imageUrl.split('/').pop() || 'image', { type: 'image/png' });
   const uploadedImageUrl = await fal.storage.upload(file);
 
   const result = await fal.subscribe("fal-ai/imageutils/rembg", {
@@ -68,16 +74,17 @@ async function handleFalRemoveBackground(imageBase64: string, imageUrl: string, 
 
   if (typeof result === 'object' && result !== null && 'image' in result) {
     const image = result.image as { url: string; width: number; height: number };
-    return await saveProcessedImage(image.url, path.basename(imageUrl), shootId);
+    return await saveProcessedImage(image.url, imageUrl, personId, imageId);
   } else {
     throw new Error('Unexpected result format from fal.ai');
   }
 }
 
-async function handleReplicateRemoveBackground(imageBase64: string, imageUrl: string, shootId: string) {
+async function handleReplicateRemoveBackground(imageBuffer: Buffer, imageUrl: string, personId: string, imageId: number) {
+  const base64Image = imageBuffer.toString('base64');
   const prediction = await replicate.predictions.create({
     version: "fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003",
-    input: { image: `data:image/png;base64,${imageBase64}` },
+    input: { image: `data:image/png;base64,${base64Image}` },
   });
 
   let output: string | null = null;
@@ -92,27 +99,31 @@ async function handleReplicateRemoveBackground(imageBase64: string, imageUrl: st
     }
   }
 
-  return await saveProcessedImage(output, path.basename(imageUrl), shootId);
+  return await saveProcessedImage(output, imageUrl, personId, imageId);
 }
 
-async function saveProcessedImage(imageUrl: string, originalFileName: string, shootId: string) {
+async function saveProcessedImage(imageUrl: string, originalFileName: string, personId: string, imageId: number) {
   const response = await fetch(imageUrl);
   const arrayBuffer = await response.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  const publicDir = path.join(process.cwd(), 'public');
-  const bgRemovedDir = path.join(publicDir, 'assets', 'bg-removed', shootId);
+  const fileName = `nobg_${originalFileName.split('/').pop()}`;
+  const filePath = `${personId}/${fileName}`;
 
-  // Ensure the bg-removed directory exists
-  await fs.mkdir(bgRemovedDir, { recursive: true });
+  await userImgBucket.file(filePath).save(buffer, {
+    metadata: {
+      contentType: 'image/png',
+    },
+  });
 
-  const fileExtension = path.extname(originalFileName);
-  const baseName = path.basename(originalFileName, fileExtension);
-  const newFileName = `nobg_${baseName}${fileExtension}`;
-  const filePath = path.join(bgRemovedDir, newFileName);
+  const preprocessedUrl = `https://storage.googleapis.com/${userImgBucket.name}/${filePath}`;
 
-  await fs.writeFile(filePath, buffer);
-
-  // Return the URL path relative to the public directory
-  return `/assets/bg-removed/${shootId}/${newFileName}`;
+  // Here, we're not saving to the database directly. 
+  // Instead, we return the necessary information for the client to save later.
+  return {
+    imageId,
+    beforeFileName: originalFileName.split('/').pop(),
+    afterFileName: fileName,
+    preprocessedUrl,
+  };
 }
