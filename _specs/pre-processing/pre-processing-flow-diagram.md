@@ -21,12 +21,15 @@ sequenceDiagram
     User->>UI: Click "Remove Background"
     loop For each unprocessed image
         UI->>UI: Show loading spinner
-        UI->>UI: Convert image to base64
         par Background Removal
-            UI->>API: POST /api/remove-background
-            API->>Fal: Send image for processing (default)
-            Fal-->>API: Return processed image URL
-            Note over API,Fal: Fallback to Replicate if Fal fails
+            UI->>API: POST /api/remove-background (signed URL)
+            alt Provider = Fal
+                API->>Fal: Send signed URL for background removal
+                Fal-->>API: Return processed image URL
+            else Provider = Replicate
+                API->>Replicate: Send Base64 image for background removal
+                Replicate-->>API: Return processed image URL
+            end
         and Image Captioning
             UI->>ImgCaption: captionImageAction(imageUrl, shootId)
             ImgCaption->>DB: Fetch person data for shoot
@@ -45,8 +48,8 @@ sequenceDiagram
 
     User->>UI: Click "Save"
     loop For each preprocessed image
-        UI->>API: POST /api/save-preprocessed-image
-        API->>DB: Save preprocessed image data
+        UI->>API: POST /api/save-preprocessed-images
+        API->>DB: Save processed image and caption
         DB-->>API: Confirm save
         API-->>UI: Confirm save
     end

@@ -54,7 +54,7 @@ This specification outlines the functionality for uploading and managing photos 
    - The rotated image is saved as a cropped version.
 
 ### Data Management
-1. Person data is sent to the `/api/upload-images` endpoint and saved in the `persons` table in the database.
+1. Person data is sent to the `/api/upload-user-images` endpoint and saved in the `persons` table in the database.
 2. Image data, including both original and cropped URLs, are saved in the `images` table in the database, referencing the `personId` they belong to.
 
 ## Technical Requirements

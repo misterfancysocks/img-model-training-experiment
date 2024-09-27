@@ -56,6 +56,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No images or person ID provided' }, { status: 400 });
     }
 
+    // Ensure personId is a number
+    const numericPersonId = Number(personId);
+    if (isNaN(numericPersonId)) {
+      return NextResponse.json({ error: 'Invalid person ID' }, { status: 400 });
+    }
+
     const processImage = async (image: { imageUrl: string; id: number }) => {
       // Extract the file path from the full URL
       const filePath = new URL(image.imageUrl).pathname.split('/').pop();
@@ -68,9 +74,9 @@ export async function POST(req: NextRequest) {
 
       const [bgRemovalResult, captionResult] = await Promise.all([
         provider === 'fal'
-          ? handleFalRemoveBackground(imageBuffer, filePath, personId, image.id)
-          : handleReplicateRemoveBackground(imageBuffer, filePath, personId, image.id),
-        captionImage(image.imageUrl, personId)
+          ? handleFalRemoveBackground(imageBuffer, filePath, numericPersonId, image.id)
+          : handleReplicateRemoveBackground(imageBuffer, filePath, numericPersonId, image.id),
+        captionImage(image.imageUrl, numericPersonId)
       ]);
 
       return {
@@ -81,22 +87,72 @@ export async function POST(req: NextRequest) {
     };
 
     const outputUrls = await Promise.all(images.map(processImage));
+    console.log('\x1b[36mProcessed outputUrls:\x1b[0m', outputUrls);
 
-    return NextResponse.json({ outputUrls });
+    // Insert preprocessed images into the database
+    const db = await openDb();
+    const insertStmt = await db.prepare(`
+      INSERT INTO preprocessed_images (imageId, beforeFileName, afterFileName, preprocessedUrl, caption, llm)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    const preprocessedImages = [];
+    for (const url of outputUrls) {
+      try {
+        await insertStmt.run(url.imageId, url.beforeFileName, url.afterFileName, url.preprocessedUrl, url.caption, url.llm);
+        console.log('\x1b[36mInserted preprocessed image into DB:\x1b[0m', url);
+        preprocessedImages.push(url);
+      } catch (dbError) {
+        console.error('\x1b[36mDatabase insertion error:\x1b[0m', dbError);
+      }
+    }
+    await insertStmt.finalize();
+    await db.close();
+
+    console.log('\x1b[36mPreprocessed images after DB insertion:\x1b[0m', preprocessedImages);
+
+    // Generate signed URLs for preprocessed images
+    const signedPreprocessedUrls = await Promise.all(preprocessedImages.map(async (img) => {
+      const fileName = img.preprocessedUrl.split('/').pop() || '';
+      const file = userImgBucket.file(fileName);
+      try {
+        const [signedUrl] = await file.getSignedUrl({
+          version: 'v4',
+          action: 'read',
+          expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+        });
+        console.log('\x1b[36mGenerated signed URL:\x1b[0m', signedUrl);
+        return { ...img, signedPreprocessedUrl: signedUrl };
+      } catch (signError) {
+        console.error('\x1b[36mSigned URL generation error:\x1b[0m', signError);
+        return { ...img, signedPreprocessedUrl: null };
+      }
+    }));
+
+    console.log('\x1b[36mFinal signed preprocessed URLs:\x1b[0m', signedPreprocessedUrls);
+
+    return NextResponse.json({ outputUrls: signedPreprocessedUrls });
   } catch (error) {
     console.error('\x1b[36m /pre-process-images error:\x1b[0m', error);
     return NextResponse.json({ error: 'Failed to process the images' }, { status: 500 });
   }
 }
 
-// Update these functions to use filePath instead of full URL
-async function handleFalRemoveBackground(imageBuffer: Buffer, filePath: string, personId: string, imageId: number) {
-  const file = new File([imageBuffer], filePath.split('/').pop() || 'image', { type: 'image/png' });
-  const uploadedImageUrl = await fal.storage.upload(file);
+// Remove the fal.storage upload and use signed URLs instead
+async function handleFalRemoveBackground(imageBuffer: Buffer, filePath: string, personId: number, imageId: number) {
+  // Generate a signed URL for the original image
+  const [signedOriginalUrl] = await userImgBucket.file(filePath).getSignedUrl({
+    version: 'v4',
+    action: 'read',
+    expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+  });
 
+  console.log('\x1b[36mUsing signed URL for FAL rembg:\x1b[0m', signedOriginalUrl);
+
+  // Send the signed URL directly to FAL for background removal
   const result = await fal.subscribe("fal-ai/imageutils/rembg", {
     input: {
-      image_url: uploadedImageUrl,
+      image_url: signedOriginalUrl, // Use the signed URL directly
       sync_mode: true,
       logs: true,
     },
@@ -104,7 +160,6 @@ async function handleFalRemoveBackground(imageBuffer: Buffer, filePath: string, 
     onQueueUpdate: (update) => {
       if (update.status === "IN_PROGRESS") {
         console.log('\x1b[36m fal.ai rembg progress:\x1b[0m');
-        // console.log('update', update);
         update.logs.forEach(log => console.log(`\x1b[36m${log.message}\x1b[0m`));
       }
     },
@@ -118,7 +173,7 @@ async function handleFalRemoveBackground(imageBuffer: Buffer, filePath: string, 
   }
 }
 
-async function handleReplicateRemoveBackground(imageBuffer: Buffer, filePath: string, personId: string, imageId: number) {
+async function handleReplicateRemoveBackground(imageBuffer: Buffer, filePath: string, personId: number, imageId: number) {
   const base64Image = imageBuffer.toString('base64');
   const prediction = await replicate.predictions.create({
     version: "fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003",
@@ -239,13 +294,13 @@ function calculateAge(birthdate: string) {
   return age;
 }
 
-async function saveProcessedImage(imageUrl: string, originalFilePath: string, personId: string, imageId: number) {
+async function saveProcessedImage(imageUrl: string, originalFilePath: string, personId: number, imageId: number) {
   const response = await fetch(imageUrl);
   const arrayBuffer = await response.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
   const fileName = `nobg_${originalFilePath.split('/').pop()}`;
-  const filePath = `${personId}/${fileName}`;
+  const filePath = `${fileName}`;
 
   await userImgBucket.file(filePath).save(buffer, {
     metadata: {

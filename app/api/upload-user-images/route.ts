@@ -1,4 +1,4 @@
-// app/api/upload-images/route.ts
+// app/api/upload-user-images/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Storage } from '@google-cloud/storage';
@@ -18,119 +18,191 @@ const storage = new Storage({
 const bucket = storage.bucket(process.env.GCP_USER_IMG_UPLOAD_BUCKET_NAME || '');
 
 export async function POST(req: NextRequest) {
-  let db: MyDatabase | null = null; // Explicitly type 'db' as MyDatabase or null
+  console.log('\x1b[36m Received upload-user-images POST request \x1b[0m');
+  
+  let db: MyDatabase | null = null;
 
   try {
-    const { personData, images } = await req.json();
+    const { personData, images, personId, imageId, croppedImage } = await req.json();
+    console.log('\x1b[36m Payload received: \x1b[0m', { personData, images, personId, imageId, croppedImage });
 
-    // Basic payload validation
-    if (!personData || !images || !Array.isArray(images)) {
-      return NextResponse.json({ error: 'Invalid payload structure' }, { status: 400 });
-    }
+    // Determine if it's an initial upload or an update
+    if (personData && images) {
+      // Handle initial upload
+      // Basic payload validation
+      if (!personData || !images || !Array.isArray(images)) {
+        return NextResponse.json({ error: 'Invalid payload structure' }, { status: 400 });
+      }
 
-    // Open database connection
-    db = await openDb();
+      // Open database connection
+      db = await openDb();
 
-    // Start transaction
-    await db.run('BEGIN TRANSACTION');
+      // Start transaction
+      await db.run('BEGIN TRANSACTION');
 
-    // Insert person data into the database
-    const result = await db.run(
-      'INSERT INTO persons (firstName, lastName, ethnicity, gender, birthdate) VALUES (?, ?, ?, ?, ?)',
-      [
-        personData.firstName,
-        personData.lastName,
-        personData.ethnicity,
-        personData.gender,
-        personData.birthdate,
-      ]
-    );
-    const personId = result.lastID;
+      // Insert person data into the database
+      const result = await db.run(
+        'INSERT INTO persons (firstName, lastName, ethnicity, gender, birthdate) VALUES (?, ?, ?, ?, ?)',
+        [
+          personData.firstName,
+          personData.lastName,
+          personData.ethnicity,
+          personData.gender,
+          personData.birthdate,
+        ]
+      );
+      const personId = result.lastID;
 
-    // Upload images and save their information
-    const uploadedImages = await Promise.all(
-      images.map(async (image: any) => {
-        if (!image.fileName) {
-          throw new Error('Image fileName is required');
-        }
-
-        // Sanitize the file name to prevent security issues
-        const sanitizedFileName = sanitize(image.fileName);
-        if (!sanitizedFileName) {
-          throw new Error(`Invalid file name after sanitizing: ${image.fileName}`);
-        }
-
-        const uuid = uuidv4();
-        const originalFileName = `o_${uuid}_${sanitizedFileName}`; // Prefix with 'o_'
-
-        const originalFile = bucket.file(originalFileName);
-
-        // Validate original image data
-        if (!image.original || typeof image.original !== 'string') {
-          throw new Error(`Invalid or missing original image data for file: ${image.fileName}`);
-        }
-
-        // Extract MIME type dynamically
-        const mimeTypeMatch = image.original.match(/^data:(image\/\w+);base64,/);
-        const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
-
-        // Decode and upload original image
-        const base64Original = image.original.replace(/^data:image\/\w+;base64,/, '');
-        const originalBuffer = Buffer.from(base64Original, 'base64');
-
-        await originalFile.save(originalBuffer, {
-          metadata: {
-            contentType: mimeType, // Dynamic content type
-          },
-        });
-
-        const originalGcpUrl = `https://storage.googleapis.com/${bucket.name}/${originalFileName}`;
-
-        let croppedGcpUrl: string | null = null;
-        if (image.cropped) {
-          if (typeof image.cropped !== 'string') {
-            throw new Error(`Invalid cropped image data for file: ${image.fileName}`);
+      // Upload images and save their information
+      const uploadedImages = await Promise.all(
+        images.map(async (image: any, index: number) => {
+          console.log(`\x1b[36m Processing image ${index + 1}: ${image.fileName} \x1b[0m`);
+          if (!image.fileName) {
+            throw new Error('Image fileName is required');
           }
 
-          const croppedFileName = `c_${uuid}_${sanitizedFileName}`; // Prefix with 'c_'
-          const croppedFile = bucket.file(croppedFileName);
+          // Sanitize the file name to prevent security issues
+          const sanitizedFileName = sanitize(image.fileName);
+          if (!sanitizedFileName) {
+            throw new Error(`Invalid file name after sanitizing: ${image.fileName}`);
+          }
+
+          const uuid = uuidv4();
+          const originalFileName = `o_${uuid}_${sanitizedFileName}`; // Prefix with 'o_'
+
+          const originalFile = bucket.file(originalFileName);
+
+          // Validate original image data
+          if (!image.original || typeof image.original !== 'string') {
+            throw new Error(`Invalid or missing original image data for file: ${image.fileName}`);
+          }
 
           // Extract MIME type dynamically
-          const mimeTypeCroppedMatch = image.cropped.match(/^data:(image\/\w+);base64,/);
-          const mimeTypeCropped = mimeTypeCroppedMatch ? mimeTypeCroppedMatch[1] : 'image/jpeg';
+          const mimeTypeMatch = image.original.match(/^data:(image\/\w+);base64,/);
+          const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
 
-          // Decode and upload cropped image
-          const base64Cropped = image.cropped.replace(/^data:image\/\w+;base64,/, '');
-          const croppedBuffer = Buffer.from(base64Cropped, 'base64');
+          // Decode and upload original image
+          const base64Original = image.original.replace(/^data:image\/\w+;base64,/, '');
+          const originalBuffer = Buffer.from(base64Original, 'base64');
 
-          await croppedFile.save(croppedBuffer, {
+          await originalFile.save(originalBuffer, {
             metadata: {
-              contentType: mimeTypeCropped, // Dynamic content type
+              contentType: mimeType, // Dynamic content type
             },
           });
 
-          croppedGcpUrl = `https://storage.googleapis.com/${bucket.name}/${croppedFileName}`;
-        }
+          const originalGcpUrl = `https://storage.googleapis.com/${bucket.name}/${originalFileName}`;
 
-        // Save image information to the database
-        await db!.run( // Use 'db!' to assert that 'db' is not null
-          'INSERT INTO images (personId, fileName, originalUrl, croppedUrl) VALUES (?, ?, ?, ?)',
-          [personId, originalFileName, originalGcpUrl, croppedGcpUrl]
-        );
+          let croppedGcpUrl: string | null = null;
+          if (image.cropped) {
+            if (typeof image.cropped !== 'string') {
+              throw new Error(`Invalid cropped image data for file: ${image.fileName}`);
+            }
 
-        return {
-          fileName: originalFileName,
-          originalUrl: originalGcpUrl,
-          croppedUrl: croppedGcpUrl,
-        };
-      })
-    );
+            const croppedFileName = `c_${uuid}_${sanitizedFileName}`; // Prefix with 'c_'
+            const croppedFile = bucket.file(croppedFileName);
 
-    // Commit transaction
-    await db.run('COMMIT');
+            // Extract MIME type dynamically
+            const mimeTypeCroppedMatch = image.cropped.match(/^data:(image\/\w+);base64,/);
+            const mimeTypeCropped = mimeTypeCroppedMatch ? mimeTypeCroppedMatch[1] : 'image/jpeg';
 
-    return NextResponse.json({ personId, uploadedImages });
+            // Decode and upload cropped image
+            const base64Cropped = image.cropped.replace(/^data:image\/\w+;base64,/, '');
+            const croppedBuffer = Buffer.from(base64Cropped, 'base64');
+
+            await croppedFile.save(croppedBuffer, {
+              metadata: {
+                contentType: mimeTypeCropped, // Dynamic content type
+              },
+            });
+
+            croppedGcpUrl = `https://storage.googleapis.com/${bucket.name}/${croppedFileName}`;
+          }
+
+          // Save image information to the database
+          await db!.run( // Use 'db!' to assert that 'db' is not null
+            'INSERT INTO images (personId, fileName, originalUrl, croppedUrl) VALUES (?, ?, ?, ?)',
+            [personId, originalFileName, originalGcpUrl, croppedGcpUrl]
+          );
+
+          return {
+            fileName: originalFileName,
+            originalUrl: originalGcpUrl,
+            croppedUrl: croppedGcpUrl,
+          };
+        })
+      );
+
+      console.log('\x1b[36m All images processed successfully \x1b[0m');
+
+      // Commit transaction
+      await db.run('COMMIT');
+
+      return NextResponse.json({ personId, uploadedImages });
+    } else if (personId && imageId && croppedImage) {
+      // Handle cropped image update
+
+      // Validate payload
+      if (!personId || !imageId || !croppedImage.original) {
+        return NextResponse.json({ error: 'Invalid payload for image update' }, { status: 400 });
+      }
+
+      // Initialize database connection if not already
+      if (!db) {
+        db = await openDb();
+      }
+
+      // Fetch existing image record
+      const existingImage = await db.get(
+        'SELECT * FROM images WHERE id = ? AND personId = ?',
+        [imageId, personId]
+      );
+
+      if (!existingImage) {
+        throw new Error('Image not found for the given personId and imageId');
+      }
+
+      // Sanitize the file name
+      const sanitizedFileName = sanitize(croppedImage.fileName);
+      if (!sanitizedFileName) {
+        throw new Error(`Invalid file name after sanitizing: ${croppedImage.fileName}`);
+      }
+
+      const uuid = uuidv4();
+      const croppedFileName = `c_${uuid}_${sanitizedFileName}`;
+
+      const croppedFile = bucket.file(croppedFileName);
+
+      // Extract MIME type dynamically
+      const mimeTypeMatch = croppedImage.original.match(/^data:(image\/\w+);base64,/);
+      const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
+
+      // Decode and upload cropped image
+      const base64Cropped = croppedImage.original.replace(/^data:image\/\w+;base64,/, '');
+      const croppedBuffer = Buffer.from(base64Cropped, 'base64');
+
+      await croppedFile.save(croppedBuffer, {
+        metadata: {
+          contentType: mimeType,
+        },
+      });
+
+      const croppedGcpUrl = `https://storage.googleapis.com/${bucket.name}/${croppedFileName}`;
+
+      // Update the image record with the cropped URL
+      await db.run(
+        'UPDATE images SET croppedUrl = ? WHERE id = ? AND personId = ?',
+        [croppedGcpUrl, imageId, personId]
+      );
+
+      console.log(`\x1b[36m Cropped image ${imageId} updated successfully \x1b[0m`);
+
+      return NextResponse.json({ uploadedImage: { croppedUrl: croppedGcpUrl } });
+    } else {
+      return NextResponse.json({ error: 'Invalid payload structure' }, { status: 400 });
+    }
   } catch (error: unknown) {
+    console.error('\x1b[36m Error in upload-user-images route: \x1b[0m', error);
     // Rollback transaction in case of error
     if (db) {
       try {

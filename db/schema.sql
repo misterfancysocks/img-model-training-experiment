@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS generated_images;
 DROP TABLE IF EXISTS generation_prompts;
 DROP TABLE IF EXISTS p_backgrounds;
 DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS costume_ideas;
 
 PRAGMA foreign_keys = ON;
 
@@ -134,5 +135,13 @@ CREATE TABLE IF NOT EXISTS generation_prompts (
   FOREIGN KEY (loraId) REFERENCES loras(id) ON DELETE CASCADE,
   FOREIGN KEY (backgroundId) REFERENCES p_backgrounds(id) ON DELETE CASCADE,
   FOREIGN KEY (generatedImageId) REFERENCES generated_images(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS costume_ideas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  personId INTEGER NOT NULL,
+  idea TEXT NOT NULL,
+  created_at DATETIME DEFAULT (datetime('now')),
+  FOREIGN KEY (personId) REFERENCES persons(id) ON DELETE CASCADE
 );
 
