@@ -13,9 +13,9 @@ sequenceDiagram
     Client->>ReviewImages: Initialize component
     ReviewImages->>GetImagesAPI: GET /api/get-user-images?personId={personId}
     GetImagesAPI->>DB: Fetch images for personId
-    DB-->>GetImagesAPI: Return image data (id, fileName, originalUrl, croppedUrl)
+    DB-->>GetImagesAPI: Return image data (id, uuid, fileName, originalUrl, modifiedUrl)
     GetImagesAPI->>GCSUtil: Generate signed URLs for images
-    GCSUtil->>GCS: Request signed URLs (originalUrl, croppedUrl)
+    GCSUtil->>GCS: Request signed URLs (originalUrl, modifiedUrl)
     GCS-->>GCSUtil: Return signed URLs
     GCSUtil-->>GetImagesAPI: Return signed URLs
     GetImagesAPI-->>ReviewImages: Return image data with signed URLs
@@ -45,29 +45,33 @@ sequenceDiagram
     Client->>ReviewImages: Click "Create Your AI Model"
     ReviewImages->>UpdateImagesAPI: POST /api/upload-user-images (personId, modifiedImages)
     Note right of ReviewImages: modifiedImages: [{id, rotation, crop, deleted}]
-    UpdateImagesAPI->>GCSUtil: Process image changes (crop, rotate)
-    GCSUtil->>GCS: Update images in storage (imageId, newImageData)
-    GCS-->>GCSUtil: Confirm updates
-    GCSUtil-->>UpdateImagesAPI: Return updated image data (newUrls)
+    loop For each modified image
+        UpdateImagesAPI->>GCSUtil: Process image changes (crop, rotate)
+        GCSUtil->>GCS: Update images in storage (imageId, newImageData)
+        GCS-->>GCSUtil: Confirm updates
+        GCSUtil->>GCS: Generate new signed URL
+        GCS-->>GCSUtil: Return new signed URL
+        GCSUtil-->>UpdateImagesAPI: Return updated image data (newUrls, signedUrls)
+    end
     UpdateImagesAPI->>DB: Update image metadata (URLs, deletions)
     DB-->>UpdateImagesAPI: Confirm database updates
-    UpdateImagesAPI-->>ReviewImages: Return updated image data (id, newUrls, deletedIds)
+    UpdateImagesAPI-->>ReviewImages: Return updated image data (id, newUrls, signedUrls, deletedIds)
     ReviewImages->>Client: Navigate to AI model generation page
 ```
 
 ## Notes on Implementation
 
-1. **Local State Management**: The `ReviewImages` component needs to implement local state management for rotations, crops, and deletions. This state should include:
+1. **Local State Management**: The `ReviewImages` component manages local state for rotations, crops, and deletions. This state includes:
    - `imageId`
    - `rotation` (degrees)
    - `crop` (x, y, width, height)
    - `deleted` (boolean)
 
-2. **Image Display**: The component should apply local rotations and crops when displaying images to the user.
+2. **Image Display**: The component applies local rotations and crops when displaying images to the user.
 
 3. **Revert Changes**: Consider adding functionality to revert local changes before final submission.
 
-4. **Batch Update API**: Implement the `/api/upload-user-images` endpoint to handle batch updates of image modifications. The payload should include:
+4. **Batch Update API**: The `/api/upload-user-images` endpoint handles batch updates of image modifications. The payload includes:
    - `personId`
    - Array of modified images with their `id`, `rotation`, `crop`, and `deleted` status
 
@@ -77,4 +81,6 @@ sequenceDiagram
 
 7. **User Feedback**: Provide clear feedback to the user during the update process and navigation to the AI model generation page.
 
-These changes ensure that all modifications are kept client-side until the user decides to create their AI model, at which point all changes are sent to the server in a single batch update. The diagram now clearly shows the key data being passed between components at each step of the process.
+8. **Signed URLs**: The system now generates and uses signed URLs for both original and modified images, enhancing security and access control.
+
+These updated diagrams now accurately reflect the changes we've made, including the use of signed URLs and the handling of image modifications and deletions in the review process.

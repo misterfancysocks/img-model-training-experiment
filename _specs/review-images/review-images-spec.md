@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS images (
 ### Image Review
 - **Display**:
   - Show all uploaded images with options to crop, rotate, or delete.
-  - **Always use signed URLs for viewing images.**
+  - Always use signed URLs for viewing images.
   - If a modified version of an image exists, always display and make changes to the modified version.
   - Apply any local rotations or crops when displaying images to the user.
 
@@ -70,11 +70,10 @@ CREATE TABLE IF NOT EXISTS images (
     - Open cropping tool.
     - Allow users to select the crop area.
     - Store crop information locally.
-    - If a modified version already exists, apply the new crop to the existing modified image.
+    - Reset crop parameters when the crop button is clicked again.
   - **Rotate**:
     - Update rotation locally.
     - Display rotated image to the user without sending to the server.
-    - If a modified version exists, rotate the modified image.
   - **Delete**:
     - Mark image for deletion locally.
     - Remove from the displayed list without sending to the server.
@@ -123,14 +122,13 @@ CREATE TABLE IF NOT EXISTS images (
     ```
 
 - **POST `/api/upload-user-images`**:
-  - **Payload**:
+  - **Payload for modifications**:
     ```json
     {
       "personId": 1,
       "images": [
         {
           "id": 1,
-          "uuid": "abc123",
           "rotation": 90,
           "crop": {
             "x": 10,
@@ -141,13 +139,17 @@ CREATE TABLE IF NOT EXISTS images (
         },
         {
           "id": 2,
-          "uuid": "def456",
+          "rotation": 0,
+          "crop": null
+        },
+        {
+          "id": 3,
           "deleted": true
         }
       ]
     }
     ```
-  - **Response**:
+  - **Response for modifications**:
     ```json
     {
       "updatedImages": [
@@ -158,10 +160,45 @@ CREATE TABLE IF NOT EXISTS images (
           "originalGcsObjectUrl": "https://storage.googleapis.com/bucket/o_abc123_profile_pic.jpg",
           "modifiedGcsObjectUrl": "https://storage.googleapis.com/bucket/m_abc123_profile_pic.jpg",
           "signedOriginalUrl": "https://signed.url/for/viewing/original",
-          "signedModifiedUrl": "https://signed.url/for/viewing/modified"
+          "signedModifiedUrl": "https://signed.url/for/viewing/modified",
+          "isDeleted": 0
+        },
+        {
+          "id": 2,
+          "uuid": "def456",
+          "sanitizedFileName": "another_pic.jpg",
+          "originalGcsObjectUrl": "https://storage.googleapis.com/bucket/o_def456_another_pic.jpg",
+          "modifiedGcsObjectUrl": null,
+          "signedOriginalUrl": "https://signed.url/for/viewing/original",
+          "signedModifiedUrl": null,
+          "isDeleted": 0
+        },
+        {
+          "id": 3,
+          "uuid": "ghi789",
+          "sanitizedFileName": "deleted_pic.jpg",
+          "originalGcsObjectUrl": "https://storage.googleapis.com/bucket/o_ghi789_deleted_pic.jpg",
+          "modifiedGcsObjectUrl": null,
+          "signedOriginalUrl": "https://signed.url/for/viewing/original",
+          "signedModifiedUrl": null,
+          "isDeleted": 1
         }
-      ],
-      "deletedImageIds": [2]
+      ]
     }
     ```
 
+## Data Flow
+1. Fetch images from the server using signed URLs.
+2. Display images to the user with local modifications.
+3. Store all modifications (crop, rotate, delete) locally.
+4. When "Create Your AI Model" is clicked, send all modifications to the server in a single request.
+5. Server processes modifications and updates images in GCS.
+6. Redirect user to AI model generation page.
+
+## Error Handling
+- Display error messages using toast notifications.
+- Implement retry logic for failed API calls.
+
+## Performance Considerations
+- Use efficient image manipulation libraries for client-side previews.
+- Implement lazy loading for images in the review grid.

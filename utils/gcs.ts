@@ -1,5 +1,7 @@
 import { Storage, Bucket } from '@google-cloud/storage';
 
+
+
 /**
  * Initializes a Google Cloud Storage client.
  */
@@ -84,5 +86,25 @@ export function parseGcsPath(urlOrPath: string): { bucketName: string; fileName:
       throw new Error('Invalid GCS path');
     }
     return { bucketName, fileName };
+  }
+}
+
+export async function uploadFile(
+  bucket: Bucket,
+  fileName: string,
+  fileBuffer: Buffer,
+  contentType: string
+): Promise<string> {
+  const file = bucket.file(fileName);
+
+  try {
+    await file.save(fileBuffer, {
+      contentType: contentType,
+    });
+
+    return `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+  } catch (error) {
+    console.error(`Error uploading file ${fileName}:`, error);
+    throw new Error(`Failed to upload file ${fileName}`);
   }
 }

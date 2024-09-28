@@ -108,15 +108,18 @@ This API endpoint handles the upload of user images during the person setup proc
 1. Validate the incoming payload.
 2. Start a database transaction.
 3. For each image in the payload:
-   - If rotation or crop is specified:
+   - If rotation is not 0 or crop is specified:
      - Apply the rotation and/or crop to the image.
      - Generate a new file name with the format: `m_{uuid}_{sanitizedFileName}`.
      - Upload the modified image to Google Cloud Storage.
      - Update the `images` table with the new `modifiedGcsObjectUrl`.
+     - Generate a signed URL for the modified image.
+   - If no modifications are made:
+     - Keep the existing `modifiedGcsObjectUrl` (which may be null).
+     - Do not generate a new signed URL for the modified image.
    - If deleted is true:
      - Mark the image as deleted in the `images` table.
 4. Commit the transaction.
-5. Generate signed URLs for all updated images.
 6. Return the response with updated image details and deleted image IDs.
 
 ## Database Schema
@@ -142,6 +145,8 @@ CREATE TABLE IF NOT EXISTS images (
 - The `modifiedGcsObjectUrl` will initially be NULL for new uploads.
 - The original is never modified. All modifications are done using the `modifiedGcsObjectUrl`.
 - The `isDeleted` flag is used to mark images as deleted without physically removing them.
+- Modified images are only created and uploaded when actual modifications (rotation or crop) are made.
+- If no modifications are made to an image, the `modifiedGcsObjectUrl` and `signedModifiedUrl` will remain unchanged from their previous state.
 
 ## Error Handling
 - If any part of the process fails, the entire transaction should be rolled back.

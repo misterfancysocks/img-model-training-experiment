@@ -25,7 +25,7 @@ interface ImageState {
   }
 }
 
-export default function ReviewImages({ personId }: { personId: string }) {
+export default function ReviewImages({ personId }: { personId: string | null }) {
   const router = useRouter()
   const [images, setImages] = useState<ImageState[]>([])
   const [cropImageId, setCropImageId] = useState<number | null>(null)
@@ -33,6 +33,11 @@ export default function ReviewImages({ personId }: { personId: string }) {
   const { toast } = useToast()
 
   const fetchImages = useCallback(async () => {
+    if (!personId) {
+      console.error('No personId provided to ReviewImages component');
+      return;
+    }
+
     try {
       const response = await fetch(`/api/get-user-images?personId=${personId}`)
       if (!response.ok) throw new Error('Failed to fetch images')
@@ -53,27 +58,33 @@ export default function ReviewImages({ personId }: { personId: string }) {
   }, [personId, toast])
 
   useEffect(() => {
-    fetchImages()
-  }, [fetchImages])
+    if (personId) {
+      fetchImages()
+    }
+  }, [fetchImages, personId])
 
   const handleRotate = useCallback((id: number) => {
-    setImages(prevImages => prevImages.map(img => 
-      img.id === id 
-        ? { ...img, localModifications: { ...img.localModifications, rotation: (img.localModifications.rotation + 90) % 360 } }
-        : img
-    ))
-  }, [])
+    setImages(prevImages => prevImages.map(img => {
+      if (img.id === id) {
+        const newRotation = (img.localModifications.rotation + 90) % 360;
+        console.log(`Rotating image ${id} to ${newRotation} degrees`);
+        return { ...img, localModifications: { ...img.localModifications, rotation: newRotation } };
+      }
+      return img;
+    }));
+  }, []);
 
   const handleCropComplete = useCallback((crop: Crop) => {
     if (cropImageId !== null) {
+      console.log(`Applying crop to image ${cropImageId}:`, crop);
       setImages(prevImages => prevImages.map(img => 
         img.id === cropImageId
           ? { ...img, localModifications: { ...img.localModifications, crop } }
           : img
-      ))
+      ));
     }
-    setCropImageId(null)
-  }, [cropImageId])
+    setCropImageId(null);
+  }, [cropImageId]);
 
   const handleCropReset = useCallback((id: number) => {
     setImages(prevImages => prevImages.map(img => 
@@ -85,37 +96,65 @@ export default function ReviewImages({ personId }: { personId: string }) {
   }, [])
 
   const handleDelete = useCallback((id: number) => {
-    setImages(prevImages => prevImages.filter(img => img.id !== id))
+    console.log(`Marking image ${id} for deletion`);
+    setImages(prevImages => prevImages.filter(img => img.id !== id));
   }, [])
 
   const handleCreateModel = useCallback(async () => {
     try {
-      const modifiedImages = images.map(img => ({
-        id: img.id,
-        uuid: img.uuid,
-        rotation: img.localModifications.rotation,
-        crop: img.localModifications.crop,
-      }))
+      const imagesToSend = images.map(img => {
+        const imageData: {
+          id: number;
+          uuid: string;
+          rotation?: number;
+          crop?: Crop | null;
+          deleted?: boolean;
+        } = {
+          id: img.id,
+          uuid: img.uuid,
+        };
+
+        // Include rotation if it's not 0
+        if (img.localModifications.rotation !== 0) {
+          imageData.rotation = img.localModifications.rotation;
+        }
+
+        // Include crop if it's not null
+        if (img.localModifications.crop !== null) {
+          imageData.crop = img.localModifications.crop;
+        }
+
+        // Set deleted flag if the image is not in the current state
+        // (assuming deleted images are removed from the 'images' array)
+        if (!images.some(currentImg => currentImg.id === img.id)) {
+          imageData.deleted = true;
+        }
+
+        return imageData;
+      });
+
+      console.log('Images to be sent to server:', imagesToSend);
 
       const response = await fetch('/api/upload-user-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personId, images: modifiedImages }),
-      })
+        body: JSON.stringify({ personId, images: imagesToSend }),
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to update images')
+        throw new Error('Failed to update images');
       }
 
-      console.log("Images updated successfully, creating AI model")
-      router.push(`/profile/${personId}/generating-model`)
+      console.log("Images updated successfully");
+      console.log("Creating AI model");
+      router.push(`/profile/${personId}/generating-model`);
     } catch (error) {
-      console.error('Error updating images and creating AI model:', error)
+      console.error('Error updating images and creating AI model:', error);
       toast({
         title: "Error",
         description: "Failed to update images and create AI model.",
         variant: "destructive",
-      })
+      });
     }
   }, [images, personId, router, toast])
 

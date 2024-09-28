@@ -7,9 +7,9 @@ The GCS module handles interactions with Google Cloud Storage, including uploadi
 
 ### Uploading Files
 - **Upload Process**:
-  - Accepts file data and metadata.
+  - Accepts file data, metadata, and full file name (including any prefixes).
   - Saves files to the specified GCS bucket.
-  - Generates a consistent naming convention with prefixes (`o_` for originals, `c_` for cropped).
+  - Returns the full GCS URL of the uploaded file.
 
 ### Generating Signed URLs
 - **Purpose**:
@@ -36,24 +36,26 @@ The GCS module handles interactions with Google Cloud Storage, including uploadi
 ### `uploadFile`
 - **Description**: Uploads a file to GCS.
 - **Parameters**:
-  - `bucketName: string` - Name of the GCS bucket.
-  - `fileName: string` - Desired name for the file in GCS.
+  - `bucket: Bucket` - The GCS bucket instance.
+  - `fileName: string` - Full name for the file in GCS (including any prefixes).
   - `fileBuffer: Buffer` - File data.
   - `contentType: string` - MIME type of the file.
-- **Returns**: `Promise<void>`
+- **Returns**: `Promise<string>` - The full GCS URL of the uploaded file.
 
 ### `generateSignedUrl`
 - **Description**: Generates a signed URL for accessing a file.
 - **Parameters**:
-  - `fileIdentifier: string` - Either a full GCS URL or a `bucket/path` string.
-  - `options?: { expiration?: number }` - Optional settings for the URL.
-- **Returns**: `Promise<string>`
+  - `bucket: Bucket` - The GCS bucket instance.
+  - `fileName: string` - The name of the file in the bucket.
+  - `action: 'read' | 'write'` - The action for the signed URL.
+  - `expiresInMs: number` - Time in milliseconds until the signed URL expires.
+- **Returns**: `Promise<string>` - The generated signed URL.
 
 ### `parseGcsPath`
 - **Description**: Parses a GCS path or URL into bucket and file path.
 - **Parameters**:
-  - `input: string` - GCS URL or `bucket/path` string.
-- **Returns**: `{ bucket: string; path: string }`
+  - `urlOrPath: string` - GCS URL or `bucket/path` string.
+- **Returns**: `{ bucketName: string; fileName: string }`
 
 ## Expected Inputs and Outputs
 
@@ -62,14 +64,14 @@ The GCS module handles interactions with Google Cloud Storage, including uploadi
   - GCS paths or URLs for generating signed URLs.
 
 - **Outputs**:
-  - Confirmation of successful uploads.
+  - Confirmation of successful uploads with full GCS URLs.
   - Signed URLs for secure file access.
 
 ## Dependencies
 
 - **Libraries**:
   - `@google-cloud/storage` for interacting with GCS.
-  - `dotenv` for environment variable management.
+  - Environment variables for GCS configuration.
 
 ## Error Handling
 

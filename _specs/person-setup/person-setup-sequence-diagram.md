@@ -23,10 +23,14 @@ sequenceDiagram
         GCSUtil->>GCS: Store image in specified bucket
         GCS-->>GCSUtil: Confirm upload
         GCSUtil-->>UploadAPI: Return upload confirmation and URL
-        UploadAPI->>DB: Store image metadata (originalUrl, bucket, fileName)
+        UploadAPI->>GCSUtil: Generate signed URL for image
+        GCSUtil->>GCS: Request signed URL
+        GCS-->>GCSUtil: Return signed URL
+        GCSUtil-->>UploadAPI: Return signed URL
+        UploadAPI->>DB: Store image metadata (originalUrl, bucket, fileName, uuid)
     end
     DB-->>UploadAPI: Confirm image metadata stored
-    UploadAPI-->>Client: Return personId and uploaded image details
+    UploadAPI-->>Client: Return personId and uploaded image details (including signed URLs)
     Client->>Client: Store personId in localStorage
     Client->>Client: Redirect to review images page
     Client-->>User: Display success message
@@ -43,8 +47,9 @@ sequenceDiagram
      - It generates a UUID for the filename.
      - It calls the GCS utility to upload the image, passing the bucket name, filename `o_{uuid}_{filename}`, and image data.
      - The GCS utility interacts with Google Cloud Storage to store the image in the specified bucket.
-     - It stores the image metadata (including the `gcs_url`, `bucket`, and `fileName`) in the database.
-5. The API returns the `personId` and details of the uploaded images to the client.
+     - It generates a signed URL for the uploaded image.
+     - It stores the image metadata (including the `originalGcsObjectUrl`, `bucket`, `fileName`, and `uuid`) in the database.
+5. The API returns the `personId` and details of the uploaded images (including signed URLs) to the client.
 6. The client stores the `personId` in localStorage and redirects the user to the review images page.
 7. The client displays a success message to the user.
 
