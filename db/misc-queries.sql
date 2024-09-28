@@ -1,5 +1,7 @@
 select * from images;
 
+SELECT id, originalUrl, croppedUrl FROM images WHERE personId = 20;
+
 select * from persons;
 
 select * from shoots;

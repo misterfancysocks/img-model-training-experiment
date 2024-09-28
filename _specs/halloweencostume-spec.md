@@ -398,6 +398,10 @@
   - [ ] Implement caching strategies
   - [ ] Optimize frontend performance
 
+## Utilities
+- **Google Cloud Storage (GCS) Utilities**:
+  - Refer to `/specs/gcs/gcs-spec.md` for detailed specifications on handling GCS interactions, including uploading files, generating signed URLs, and parsing storage paths or URLs.
+
 ---
 
 By modifying the documentation, we've integrated the requirement for users to upload photos during the **Profile Setup** phase. The photo upload is now a mandatory step on the same page where users enter the 'person' details. After uploading photos, users are provided with the option to **'Review Uploaded Photos'** before proceeding.

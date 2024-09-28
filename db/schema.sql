@@ -64,9 +64,10 @@ END;
 CREATE TABLE IF NOT EXISTS images (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   personId INTEGER NOT NULL,
-  fileName TEXT NOT NULL,
-  originalUrl TEXT NOT NULL,
-  croppedUrl TEXT,
+  fileName TEXT NOT NULL, -- original filename
+  bucket TEXT NOT NULL, -- bucket the file is stored in
+  originalUrl TEXT NOT NULL, -- fully qualified url to the original image ex. 'https://storage.googleapis.com/{bucket}/{fileName}'
+  croppedUrl TEXT, -- url to the cropped image ex. 'https://storage.googleapis.com/{bucket}/{fileName}'
   created_at DATETIME DEFAULT (datetime('now')),
   updated_at DATETIME DEFAULT (datetime('now')),
   FOREIGN KEY (personId) REFERENCES persons(id) ON DELETE CASCADE

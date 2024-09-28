@@ -31,6 +31,13 @@ const Header = () => {
         const fetchedUsers = await response.json();
         setUsers(fetchedUsers);
         console.log('Fetched users:', fetchedUsers);
+
+        // Set default user to ID 2
+        const defaultUser = fetchedUsers.find((user: User) => user.id === 2);
+        if (defaultUser) {
+          setSelectedUser(defaultUser);
+          localStorage.setItem('selectedUserId', defaultUser.id.toString());
+        }
       } catch (error) {
         console.error('Error fetching users:', error);
         toast({
@@ -57,17 +64,17 @@ const Header = () => {
         <Link href="/" className={`hover:text-orange-300 ${pathname === '/' ? 'font-bold text-orange-200' : ''}`}>
           Home
         </Link>
-        <Link href="/upload-and-crop" className={`hover:text-orange-300 ${pathname === '/upload-and-crop' ? 'font-bold text-orange-200' : ''}`}>
-          Upload & Crop
-        </Link>
         <Link href="/person-setup" className={`hover:text-orange-300 ${pathname === '/person-setup' ? 'font-bold text-orange-200' : ''}`}>
           Person Setup
+        </Link>
+        <Link href="/review-images" className={`hover:text-orange-300 ${pathname === '/review-images' ? 'font-bold text-orange-200' : ''}`}>
+          Review Images
         </Link>
         <Link href="/pre-processing" className={`hover:text-orange-300 ${pathname === '/pre-processing' ? 'font-bold text-orange-200' : ''}`}>
           Pre-processing
         </Link>
         <Link href="/lora-training" className={`hover:text-orange-300 ${pathname === '/lora-training' ? 'font-bold text-orange-200' : ''}`}>
-          LoRA Training
+          Model Training
         </Link>
         <Link href="/image-generation" className={`hover:text-orange-300 ${pathname === '/image-generation' ? 'font-bold text-orange-200' : ''}`}>
           Image Generation

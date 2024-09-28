@@ -1,21 +1,14 @@
 // app/api/upload-user-images/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
-import { Storage } from '@google-cloud/storage';
 import { v4 as uuidv4 } from 'uuid';
 import { openDb, MyDatabase } from '@/db/db';
 import sanitize from 'sanitize-filename'; // Import sanitize-filename
+import { parseGcsPath, getBucket, generateSignedUrl } from '@/utils/gcs'; // Use centralized storage utility
 
-// Initialize Google Cloud Storage
-const storage = new Storage({
-  projectId: process.env.GCP_PROJECT_ID,
-  credentials: {
-    client_email: process.env.GCP_CLIENT_EMAIL!,
-    private_key: process.env.GCP_PRIVATE_KEY?.replace(/\\n/g, '\n')!,
-  },
-});
-
-const bucket = storage.bucket(process.env.GCP_USER_IMG_UPLOAD_BUCKET_NAME || '');
+// Initialize Google Cloud Storage bucket
+const bucketName = process.env.GCP_USER_IMG_UPLOAD_BUCKET_NAME || '';
+const bucket = getBucket(bucketName);
 
 export async function POST(req: NextRequest) {
   console.log('\x1b[36m Received upload-user-images POST request \x1b[0m');
@@ -51,7 +44,7 @@ export async function POST(req: NextRequest) {
           personData.birthdate,
         ]
       );
-      const personId = result.lastID;
+      const newPersonId = result.lastID;
 
       // Upload images and save their information
       const uploadedImages = await Promise.all(
@@ -70,65 +63,43 @@ export async function POST(req: NextRequest) {
           const uuid = uuidv4();
           const originalFileName = `o_${uuid}_${sanitizedFileName}`; // Prefix with 'o_'
 
-          const originalFile = bucket.file(originalFileName);
-
-          // Validate original image data
-          if (!image.original || typeof image.original !== 'string') {
-            throw new Error(`Invalid or missing original image data for file: ${image.fileName}`);
-          }
-
-          // Extract MIME type dynamically
-          const mimeTypeMatch = image.original.match(/^data:(image\/\w+);base64,/);
-          const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
-
-          // Decode and upload original image
-          const base64Original = image.original.replace(/^data:image\/\w+;base64,/, '');
-          const originalBuffer = Buffer.from(base64Original, 'base64');
-
-          await originalFile.save(originalBuffer, {
+          // Upload original image to GCS
+          await bucket.file(originalFileName).save(Buffer.from(image.original.split(',')[1], 'base64'), {
             metadata: {
-              contentType: mimeType, // Dynamic content type
+              contentType: image.original.split(',')[0].split(':')[1].split(';')[0],
             },
           });
 
-          const originalGcpUrl = `https://storage.googleapis.com/${bucket.name}/${originalFileName}`;
-
-          let croppedGcpUrl: string | null = null;
+          // After uploading each image, construct the fully qualified URL
+          const originalUrl = `https://storage.googleapis.com/${bucketName}/${originalFileName}`;
+          
+          let croppedUrl: string | null = null;
           if (image.cropped) {
             if (typeof image.cropped !== 'string') {
               throw new Error(`Invalid cropped image data for file: ${image.fileName}`);
             }
 
             const croppedFileName = `c_${uuid}_${sanitizedFileName}`; // Prefix with 'c_'
-            const croppedFile = bucket.file(croppedFileName);
 
-            // Extract MIME type dynamically
-            const mimeTypeCroppedMatch = image.cropped.match(/^data:(image\/\w+);base64,/);
-            const mimeTypeCropped = mimeTypeCroppedMatch ? mimeTypeCroppedMatch[1] : 'image/jpeg';
-
-            // Decode and upload cropped image
-            const base64Cropped = image.cropped.replace(/^data:image\/\w+;base64,/, '');
-            const croppedBuffer = Buffer.from(base64Cropped, 'base64');
-
-            await croppedFile.save(croppedBuffer, {
+            // Upload cropped image to GCS
+            await bucket.file(croppedFileName).save(Buffer.from(image.cropped.split(',')[1], 'base64'), {
               metadata: {
-                contentType: mimeTypeCropped, // Dynamic content type
+                contentType: image.cropped.split(',')[0].split(':')[1].split(';')[0],
               },
             });
 
-            croppedGcpUrl = `https://storage.googleapis.com/${bucket.name}/${croppedFileName}`;
+            // After uploading, construct croppedUrl
+            croppedUrl = `https://storage.googleapis.com/${bucketName}/${croppedFileName}`;
           }
 
-          // Save image information to the database
-          await db!.run( // Use 'db!' to assert that 'db' is not null
-            'INSERT INTO images (personId, fileName, originalUrl, croppedUrl) VALUES (?, ?, ?, ?)',
-            [personId, originalFileName, originalGcpUrl, croppedGcpUrl]
+          // Insert into images table with full URLs, setting croppedUrl to NULL as cropping is no longer handled
+          await db!.run(
+            'INSERT INTO images (personId, fileName, bucket, originalUrl, croppedUrl) VALUES (?, ?, ?, ?, ?)',
+            [newPersonId, originalFileName, bucketName, originalUrl, null] // Set croppedUrl to NULL
           );
 
           return {
             fileName: originalFileName,
-            originalUrl: originalGcpUrl,
-            croppedUrl: croppedGcpUrl,
           };
         })
       );
@@ -138,7 +109,7 @@ export async function POST(req: NextRequest) {
       // Commit transaction
       await db.run('COMMIT');
 
-      return NextResponse.json({ personId, uploadedImages });
+      return NextResponse.json({ personId: newPersonId, uploadedImages });
     } else if (personId && imageId && croppedImage) {
       // Handle cropped image update
 
@@ -171,33 +142,25 @@ export async function POST(req: NextRequest) {
       const uuid = uuidv4();
       const croppedFileName = `c_${uuid}_${sanitizedFileName}`;
 
-      const croppedFile = bucket.file(croppedFileName);
-
-      // Extract MIME type dynamically
-      const mimeTypeMatch = croppedImage.original.match(/^data:(image\/\w+);base64,/);
-      const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
-
-      // Decode and upload cropped image
-      const base64Cropped = croppedImage.original.replace(/^data:image\/\w+;base64,/, '');
-      const croppedBuffer = Buffer.from(base64Cropped, 'base64');
-
-      await croppedFile.save(croppedBuffer, {
+      // Upload cropped image to GCS
+      await bucket.file(croppedFileName).save(Buffer.from(croppedImage.original.split(',')[1], 'base64'), {
         metadata: {
-          contentType: mimeType,
+          contentType: croppedImage.original.split(',')[0].split(':')[1].split(';')[0],
         },
       });
 
-      const croppedGcpUrl = `https://storage.googleapis.com/${bucket.name}/${croppedFileName}`;
+      // After uploading, construct croppedUrl
+      const croppedUrl = `https://storage.googleapis.com/${bucketName}/${croppedFileName}`;
 
-      // Update the image record with the cropped URL
+      // Update the 'croppedUrl' with the new URL
       await db.run(
         'UPDATE images SET croppedUrl = ? WHERE id = ? AND personId = ?',
-        [croppedGcpUrl, imageId, personId]
+        [croppedUrl, imageId, personId]
       );
 
       console.log(`\x1b[36m Cropped image ${imageId} updated successfully \x1b[0m`);
 
-      return NextResponse.json({ uploadedImage: { croppedUrl: croppedGcpUrl } });
+      return NextResponse.json({ uploadedImage: { fileName: croppedFileName } });
     } else {
       return NextResponse.json({ error: 'Invalid payload structure' }, { status: 400 });
     }

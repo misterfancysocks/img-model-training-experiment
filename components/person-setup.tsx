@@ -147,8 +147,11 @@ export default function PersonProfilePage({ params }: { params: { id: string } }
       const result = await response.json();
       console.log('Uploaded images:', result);
       
-      // Navigate to the review photos page
-      router.push(`/profile/${params.id}/review-images`);
+      // Set the personId in localStorage
+      localStorage.setItem('currentPersonId', result.personId.toString());
+
+      // Navigate to the review images page
+      router.push(`/review-images`);
     } catch (error) {
       console.error('Error uploading images:', error);
       toast({
