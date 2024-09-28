@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { openDb, MyDatabase } from '@/db/db';
 import sanitize from 'sanitize-filename';
 import { getBucket, uploadFile, generateSignedUrl } from '@/utils/gcs';
+import sharp from 'sharp'; // Add this import at the top
 
 const bucketName = process.env.GCP_USER_IMG_UPLOAD_BUCKET_NAME || '';
 const bucket = getBucket(bucketName);
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const { personData, images, personId } = await req.json();
-    console.log('\x1b[36m Payload received: \x1b[0m', { personData, images, personId });
+    console.log('\x1b[36m Payload received: \x1b[0m', JSON.stringify({ personData, images, personId }, null, 2));
 
     // Determine if it's an initial upload or an update
     if (personData && images) {
@@ -88,12 +89,15 @@ export async function POST(req: NextRequest) {
 
       const updatedImages = await Promise.all(
         images.map(async (image: any) => {
+          console.log(`\x1b[36m Processing image modification for image ID: ${image.id} \x1b[0m`);
+
           const existingImage = await db!.get(
             'SELECT * FROM images WHERE id = ? AND personId = ?',
             [image.id, personId]
           );
 
           if (!existingImage) {
+            console.log(`\x1b[31m Image not found for id ${image.id} and personId ${personId} \x1b[0m`);
             throw new Error(`Image not found for id ${image.id} and personId ${personId}`);
           }
 
@@ -101,23 +105,68 @@ export async function POST(req: NextRequest) {
           let signedModifiedUrl = null;
 
           if (image.deleted) {
-            // Mark the image as deleted
+            console.log(`\x1b[36m Marking image ${image.id} as deleted \x1b[0m`);
             await db!.run(
               'UPDATE images SET isDeleted = 1 WHERE id = ?',
               [image.id]
             );
           } else if (image.rotation !== 0 || image.crop) {
-            // Only apply modifications if rotation or crop is specified
-            const modifiedFileName = `m_${existingImage.uuid}_${existingImage.sanitizedFileName}`;
+            console.log(`\x1b[36m Applying modifications to image ${image.id} \x1b[0m`);
+            console.log(`\x1b[36m Rotation: ${image.rotation}, Crop: ${JSON.stringify(image.crop)} \x1b[0m`);
 
-            // Here you would apply the rotation and crop to the image
-            // For this example, we'll just upload the same image data
+            const originalFileName = existingImage.originalGcsObjectUrl.split('/').pop()!;
+            const [originalFileContent] = await bucket.file(originalFileName).download();
+
+            let sharpImage = sharp(originalFileContent);
+
+            if (image.rotation !== 0) {
+              console.log(`\x1b[36m Applying rotation of ${image.rotation} degrees \x1b[0m`);
+              sharpImage = sharpImage.rotate(image.rotation);
+            }
+
+            if (image.crop) {
+              console.log(`\x1b[36m Applying crop to image ${image.id}: ${JSON.stringify(image.crop)} \x1b[0m`);
+              const { width, height, x, y } = image.crop;
+              const roundedWidth = Math.round(width);
+              const roundedHeight = Math.round(height);
+              const roundedX = Math.round(x);
+              const roundedY = Math.round(y);
+              
+              const metadata = await sharp(originalFileContent).metadata();
+              console.log(`\x1b[36m Original image dimensions: ${metadata.width}x${metadata.height} \x1b[0m`);
+              
+              if (metadata.width && metadata.height) {
+                if (roundedX < metadata.width && roundedY < metadata.height &&
+                    roundedX + roundedWidth <= metadata.width && roundedY + roundedHeight <= metadata.height) {
+                  sharpImage = sharpImage.extract({ 
+                    width: roundedWidth, 
+                    height: roundedHeight, 
+                    left: roundedX, 
+                    top: roundedY 
+                  });
+                  console.log(`\x1b[36m Crop applied: width=${roundedWidth}, height=${roundedHeight}, left=${roundedX}, top=${roundedY} \x1b[0m`);
+                } else {
+                  console.log(`\x1b[33m Warning: Crop dimensions out of bounds. Skipping crop for image ${image.id} \x1b[0m`);
+                }
+              } else {
+                console.log(`\x1b[33m Warning: Unable to determine original image dimensions. Skipping crop for image ${image.id} \x1b[0m`);
+              }
+            }
+
+            const modifiedBuffer = await sharpImage.toBuffer();
+            console.log(`\x1b[36m Modified image buffer size: ${modifiedBuffer.length} bytes \x1b[0m`);
+
+            const modifiedFileName = `m_${existingImage.uuid}_${existingImage.sanitizedFileName}`;
+            console.log(`\x1b[36m Uploading modified image as: ${modifiedFileName} \x1b[0m`);
+
             modifiedGcsObjectUrl = await uploadFile(
               bucket,
               modifiedFileName,
-              Buffer.from(existingImage.originalGcsObjectUrl), // This should be the modified image data
-              'image/jpeg' // This should be the actual mime type of the modified image
+              modifiedBuffer,
+              'image/jpeg' // Adjust this if you're using a different format
             );
+
+            console.log(`\x1b[36m Modified image uploaded to: ${modifiedGcsObjectUrl} \x1b[0m`);
 
             await db!.run(
               'UPDATE images SET modifiedGcsObjectUrl = ? WHERE id = ?',
@@ -125,6 +174,9 @@ export async function POST(req: NextRequest) {
             );
 
             signedModifiedUrl = await generateSignedUrl(bucket, modifiedFileName);
+            console.log(`\x1b[36m Generated signed URL for modified image: ${signedModifiedUrl} \x1b[0m`);
+          } else {
+            console.log(`\x1b[36m No modifications applied to image ${image.id} \x1b[0m`);
           }
 
           const signedOriginalUrl = await generateSignedUrl(bucket, existingImage.originalGcsObjectUrl.split('/').pop()!);
@@ -144,12 +196,14 @@ export async function POST(req: NextRequest) {
 
       await db.run('COMMIT');
 
+      console.log('\x1b[36m Image modifications completed successfully \x1b[0m');
       return NextResponse.json({ updatedImages });
     } else {
+      console.log('\x1b[31m Invalid payload structure \x1b[0m');
       return NextResponse.json({ error: 'Invalid payload structure' }, { status: 400 });
     }
   } catch (error: unknown) {
-    console.error('\x1b[36m Error in upload-user-images route: \x1b[0m', error);
+    console.error('\x1b[31m Error in upload-user-images route: \x1b[0m', error);
     if (db) {
       try {
         await db.run('ROLLBACK');

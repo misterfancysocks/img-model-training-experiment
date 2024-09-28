@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
-import ReactCrop, { Crop } from 'react-image-crop'
+import ReactCrop, { Crop, PercentCrop } from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog"
 import { Ghost, RotateCw, Crop as CropIcon, Trash2, ArrowRight } from 'lucide-react'
 import { useToast } from "@/hooks/use-toast"
 
@@ -17,6 +17,8 @@ interface ImageState {
   sanitizedFileName: string
   originalGcsObjectUrl: string
   modifiedGcsObjectUrl: string | null
+  width: number
+  height: number
   signedOriginalUrl: string
   signedModifiedUrl: string | null
   localModifications: {
@@ -31,6 +33,7 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
   const [cropImageId, setCropImageId] = useState<number | null>(null)
   const [crop, setCrop] = useState<Crop>()
   const { toast } = useToast()
+  const [aspectRatio, setAspectRatio] = useState<number | undefined>(undefined);
 
   const fetchImages = useCallback(async () => {
     if (!personId) {
@@ -59,7 +62,16 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
 
   useEffect(() => {
     if (personId) {
-      fetchImages()
+      fetchImages().then(() => {
+        // Set initial aspect ratio based on the first image
+        if (images.length > 0) {
+          const img = new Image();
+          img.onload = () => {
+            setAspectRatio(img.width / img.height);
+          };
+          img.src = images[0].signedOriginalUrl;
+        }
+      });
     }
   }, [fetchImages, personId])
 
@@ -74,12 +86,30 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
     }));
   }, []);
 
-  const handleCropComplete = useCallback((crop: Crop) => {
+  const handleCropComplete = useCallback((crop: Crop, percentCrop: PercentCrop) => {
     if (cropImageId !== null) {
-      console.log(`Applying crop to image ${cropImageId}:`, crop);
+      const minSize = 10; // Minimum size in pixels
+
+      // Use Math.ceil to prevent dimensions from rounding down to zero
+      const validatedCrop: Crop | null = crop.width >= minSize && crop.height >= minSize
+        ? {
+            x: Math.ceil(crop.x),
+            y: Math.ceil(crop.y),
+            width: Math.ceil(crop.width),
+            height: Math.ceil(crop.height),
+            unit: crop.unit
+          }
+        : null;
+
+      console.log(`Client-side crop data for image ${cropImageId}:`, {
+        original: crop,
+        percent: percentCrop,
+        validated: validatedCrop
+      });
+
       setImages(prevImages => prevImages.map(img => 
         img.id === cropImageId
-          ? { ...img, localModifications: { ...img.localModifications, crop } }
+          ? { ...img, localModifications: { ...img.localModifications, crop: validatedCrop } }
           : img
       ));
     }
@@ -106,40 +136,33 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
         const imageData: {
           id: number;
           uuid: string;
+          crop?: Crop;
           rotation?: number;
-          crop?: Crop | null;
           deleted?: boolean;
         } = {
           id: img.id,
           uuid: img.uuid,
         };
 
-        // Only include rotation if it's not 0
+        if (img.localModifications.crop) {
+          imageData.crop = img.localModifications.crop;
+        }
         if (img.localModifications.rotation !== 0) {
           imageData.rotation = img.localModifications.rotation;
         }
 
-        // Only include crop if it's not null
-        if (img.localModifications.crop !== null) {
-          imageData.crop = img.localModifications.crop;
-        }
+        return imageData;
+      });
 
-        // Only set deleted flag if the image is not in the current state
-        if (!images.some(currentImg => currentImg.id === img.id)) {
-          imageData.deleted = true;
-        }
-
-        // Only return the imageData if there are modifications or it's deleted
-        return Object.keys(imageData).length > 2 ? imageData : null;
-      }).filter(Boolean); // Remove null entries
-
-      const uploadPayload = { personId, images: imagesToSend };
-      console.log('\x1b[36mPayload for /api/upload-user-images:\x1b[0m', JSON.stringify(uploadPayload, null, 2));
+      console.log('Data being sent to server:', {
+        personId,
+        images: imagesToSend
+      });
 
       const updateResponse = await fetch('/api/upload-user-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(uploadPayload),
+        body: JSON.stringify({ personId, images: imagesToSend }),
       });
 
       if (!updateResponse.ok) {
@@ -208,15 +231,17 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {images.map((image: ImageState) => (
-                <div key={image.id} className="relative rounded-lg overflow-hidden">
+                <div key={image.id} className="relative rounded-lg overflow-hidden" style={{ aspectRatio }}>
                   <img
                     src={image.signedModifiedUrl || image.signedOriginalUrl}
                     alt={`Photo ${image.id}`}
-                    className="w-full h-full object-cover aspect-square"
+                    className="w-full h-full object-cover"
                     style={{
                       transform: `rotate(${image.localModifications.rotation}deg)`,
                       ...(image.localModifications.crop && {
-                        clipPath: `inset(${image.localModifications.crop.y}px ${image.localModifications.crop.width}px ${image.localModifications.crop.height}px ${image.localModifications.crop.x}px)`,
+                        objectPosition: `-${image.localModifications.crop.x}px -${image.localModifications.crop.y}px`,
+                        width: image.localModifications.crop.width ? `${100 * (image.width / image.localModifications.crop.width)}%` : '100%',
+                        height: image.localModifications.crop.height ? `${100 * (image.height / image.localModifications.crop.height)}%` : '100%',
                       }),
                     }}
                   />
@@ -247,11 +272,16 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
                       <DialogContent className="bg-black/90 border-orange-500">
                         <DialogHeader>
                           <DialogTitle className="text-orange-300">Crop Image</DialogTitle>
+                          <DialogDescription className="text-orange-200">
+                            Drag to select the area you want to keep.
+                          </DialogDescription>
                         </DialogHeader>
                         <ReactCrop
                           crop={crop}
                           onChange={c => setCrop(c)}
                           onComplete={handleCropComplete}
+                          minWidth={10}
+                          minHeight={10}
                         >
                           <img
                             src={image.signedModifiedUrl || image.signedOriginalUrl}
