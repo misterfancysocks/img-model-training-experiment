@@ -6,7 +6,7 @@ The Review Images module allows users to review, crop, rotate, and manage their 
 Component: `/components/review-images.tsx`
 Page: `/app/review-images/page.tsx`
 
-This is the schema for the images table:
+This is the updated schema for the images table:
 ```sql
 CREATE TABLE IF NOT EXISTS images (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS images (
   uuid TEXT NOT NULL, -- {uuid}
   sanitizedFileName TEXT NOT NULL, -- sanitized version of original fileName
   bucket TEXT NOT NULL, -- bucket the file is stored in
-  uncroppedGcsObjectUrl TEXT NOT NULL, -- fully qualified url to the original image with the appropriate prefix ex. 'https://storage.googleapis.com/{bucket}/o_{uuid}_{sanitizedFileName}'
-  croppedGcsObjectUrl TEXT, -- url to the cropped image with the appropriate prefix ex. 'https://storage.googleapis.com/{bucket}/c_{uuid}_{sanitizedFileName}'
+  originalGcsObjectUrl TEXT NOT NULL, -- fully qualified url to the original image with the appropriate prefix ex. 'https://storage.googleapis.com/{bucket}/o_{uuid}_{sanitizedFileName}'
+  modifiedGcsObjectUrl TEXT, -- url to the cropped image with the appropriate prefix ex. 'https://storage.googleapis.com/{bucket}/m_{uuid}_{sanitizedFileName}'
   isDeleted INTEGER DEFAULT 0, -- Flag to mark if the image is deleted; deleted = 1
   created_at DATETIME DEFAULT (datetime('now')),
   updated_at DATETIME DEFAULT (datetime('now')),
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS images (
 - **Display**:
   - Show all uploaded images with options to crop, rotate, or delete.
   - **Always use signed URLs for viewing images.**
-  - If a cropped version of an image exists, always display and make changes to the cropped version.
+  - If a modified version of an image exists, always display and make changes to the modified version.
   - Apply any local rotations or crops when displaying images to the user.
 
 - **Actions**:
@@ -70,11 +70,11 @@ CREATE TABLE IF NOT EXISTS images (
     - Open cropping tool.
     - Allow users to select the crop area.
     - Store crop information locally.
-    - If a cropped version already exists, apply the new crop to the existing cropped image.
+    - If a modified version already exists, apply the new crop to the existing modified image.
   - **Rotate**:
     - Update rotation locally.
     - Display rotated image to the user without sending to the server.
-    - If a cropped version exists, rotate the cropped image.
+    - If a modified version exists, rotate the modified image.
   - **Delete**:
     - Mark image for deletion locally.
     - Remove from the displayed list without sending to the server.
@@ -83,15 +83,14 @@ CREATE TABLE IF NOT EXISTS images (
 - **Features**:
   - Real-time preview of changes based on local modifications.
   - Ability to revert local changes before final submission.
-  - Always work with the cropped version of an image if it exists.
+  - Always work with the modified version of an image if it exists.
   
 - **Validations**:
-  - Ensure cropped images meet size and format requirements.
+  - Ensure modified images meet size and format requirements.
 
 ### Create AI Model
 - When the user clicks "Create Your AI Model":
   - Send all accumulated changes (rotations, crops, deletions) to the server.
-  - For images with both original and cropped versions, send changes based on the cropped version.
   - Navigate to the AI model generation page after successful update.
 
 ## API Calls
@@ -99,27 +98,25 @@ CREATE TABLE IF NOT EXISTS images (
   - **Response**:
     ```json
     {
-        // example of image where only the original is available
       "images": [
         {
           "id": 1,
-          "fileName": "uuid_user_uploaded_image.jpg",
-          "originalUrl": "https://storage.googleapis.com/bucket/o_{fileName}",
-          "croppedUrl": null,
+          "uuid": "abc123",
+          "sanitizedFileName": "profile_pic.jpg",
+          "originalGcsObjectUrl": "https://storage.googleapis.com/bucket/o_abc123_profile_pic.jpg",
+          "modifiedGcsObjectUrl": null,
           "signedOriginalUrl": "https://signed.url/for/viewing/original",
-          "signedCroppedUrl": null
+          "signedModifiedUrl": null
         },
-        // example of image where both the original and cropped are available.
-        // client should always display the cropped image if it is available.
         {
           "id": 2,
-          "fileName": "uuid_another_pic.jpg",
-          "originalUrl": "https://storage.googleapis.com/bucket/o_{fileName}",
-          "croppedUrl": "https://storage.googleapis.com/bucket/c_{fileName}",
+          "uuid": "def456",
+          "sanitizedFileName": "another_pic.jpg",
+          "originalGcsObjectUrl": "https://storage.googleapis.com/bucket/o_def456_another_pic.jpg",
+          "modifiedGcsObjectUrl": "https://storage.googleapis.com/bucket/m_def456_another_pic.jpg",
           "signedOriginalUrl": "https://signed.url/for/viewing/original",
-          "signedCroppedUrl": "https://signed.url/for/viewing/cropped"
-        },
-        ...
+          "signedModifiedUrl": "https://signed.url/for/viewing/modified"
+        }
       ]
     }
     ```
@@ -132,6 +129,7 @@ CREATE TABLE IF NOT EXISTS images (
       "images": [
         {
           "id": 1,
+          "uuid": "abc123",
           "rotation": 90,
           "crop": {
             "x": 10,
@@ -142,6 +140,7 @@ CREATE TABLE IF NOT EXISTS images (
         },
         {
           "id": 2,
+          "uuid": "def456",
           "deleted": true
         }
       ]
@@ -153,15 +152,16 @@ CREATE TABLE IF NOT EXISTS images (
       "updatedImages": [
         {
           "id": 1,
-          "fileName": "uuid_user_uploaded_image.jpg",
-          "originalUrl": "https://storage.googleapis.com/bucket/o_{fileName}",
-          "croppedUrl": "https://storage.googleapis.com/bucket/c_{fileName}",
+          "uuid": "abc123",
+          "sanitizedFileName": "profile_pic.jpg",
+          "originalGcsObjectUrl": "https://storage.googleapis.com/bucket/o_abc123_profile_pic.jpg",
+          "modifiedGcsObjectUrl": "https://storage.googleapis.com/bucket/m_abc123_profile_pic.jpg",
           "signedOriginalUrl": "https://signed.url/for/viewing/original",
-          "signedCroppedUrl": "https://signed.url/for/viewing/cropped"
+          "signedModifiedUrl": "https://signed.url/for/viewing/modified"
         }
       ],
       "deletedImageIds": [2]
     }
     ```
 
-Note: The server applies rotations and crops to the images, saves them to GCS, and updates the database with new URLs. Rotation degrees are not stored in the database; instead, the rotated image is saved directly to GCS. When both original and cropped versions exist, changes are applied to the cropped version.
+Note: The server applies rotations and crops to the images, saves them to GCS, and updates the database with new URLs. Rotation degrees are not stored in the database; instead, the rotated image is saved directly to GCS. When both original and modified versions exist, changes are applied to the modified version.

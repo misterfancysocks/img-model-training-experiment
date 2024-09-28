@@ -8,7 +8,7 @@ The Person Setup module handles the creation of user profiles, including collect
 Component: `/components/person-setup.tsx`
 Page: `/app/person-setup/page.tsx`
 
-This is the schema for the images table:
+This is the updated schema for the images table:
 ```sql
 CREATE TABLE IF NOT EXISTS images (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,7 +118,10 @@ CREATE TABLE IF NOT EXISTS images (
       "personId": 1,
       "uploadedImages": [
         {
-          "fileName": "{uuid}_profile_pic.jpg"
+          "id": 1,
+          "uuid": "abc123",
+          "sanitizedFileName": "profile_pic.jpg",
+          "originalGcsObjectUrl": "https://storage.googleapis.com/bucket/o_abc123_profile_pic.jpg"
         },
         ...
       ]
@@ -132,8 +135,11 @@ CREATE TABLE IF NOT EXISTS images (
 
 - **Outputs**:
   - Creation of a new person record in the database.
-  - Uploaded images stored in Google Cloud Storage.
-  - Response containing `personId` and details of uploaded images.
+  - Uploaded images stored in Google Cloud Storage with the following details:
+    - UUID generated for each image
+    - Sanitized file name
+    - Original GCS object URL with the format: `https://storage.googleapis.com/{bucket}/o_{uuid}_{sanitizedFileName}`
+  - Response containing `personId` and details of uploaded images including their IDs, UUIDs, sanitized file names, and original GCS object URLs.
 
 ## Dependencies
 - React and Next.js
