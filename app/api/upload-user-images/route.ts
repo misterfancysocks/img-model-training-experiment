@@ -75,8 +75,8 @@ export async function POST(req: NextRequest) {
           
           // Insert into images table with full URLs
           await db!.run(
-            'INSERT INTO images (personId, fileName, bucket, originalGcsObjectUrl, modifiedGcsObjectUrl) VALUES (?, ?, ?, ?, ?)',
-            [newPersonId, originalFileName, bucketName, originalGcsObjectUrl, null]
+            'INSERT INTO images (personId, uuid, sanitizedFileName, bucket, originalGcsObjectUrl, modifiedGcsObjectUrl) VALUES (?, ?, ?, ?, ?, ?)',
+            [newPersonId, uuid, sanitizedFileName, bucketName, originalGcsObjectUrl, null]
           );
 
           return {
@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    console.error('Error in upload-images:', error);
+    console.error('Error in upload-user-images:', error);
 
     // Type narrowing for 'error'
     if (error instanceof Error) {

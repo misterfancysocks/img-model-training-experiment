@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import ReactCrop, { Crop } from 'react-image-crop'
@@ -17,6 +17,12 @@ interface ImageState {
   sanitizedFileName: string
   originalGcsObjectUrl: string
   modifiedGcsObjectUrl: string | null
+  signedOriginalUrl: string
+  signedModifiedUrl: string | null
+  localModifications: {
+    rotation: number
+    crop: Crop | null
+  }
 }
 
 export default function ReviewImages({ personId }: { personId: string }) {
@@ -26,241 +32,92 @@ export default function ReviewImages({ personId }: { personId: string }) {
   const [crop, setCrop] = useState<Crop>()
   const { toast } = useToast()
 
-  useEffect(() => {
-    const fetchImages = async () => {
-      try {
-        const response = await fetch(`/api/get-user-images?personId=${personId}`)
-        if (!response.ok) throw new Error('Failed to fetch images')
-        const data = await response.json()
-        setImages(data.images)
-        console.log('\x1b[36m Fetched images successfully \x1b[0m', data.images)
-      } catch (error) {
-        console.error('Error fetching images:', error)
-        toast({
-          title: "Error",
-          description: "Failed to fetch images.",
-          variant: "destructive",
-        });
-      }
+  const fetchImages = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/get-user-images?personId=${personId}`)
+      if (!response.ok) throw new Error('Failed to fetch images')
+      const data = await response.json()
+      setImages(data.images.map((img: any) => ({
+        ...img,
+        localModifications: { rotation: 0, crop: null }
+      })))
+      console.log('\x1b[36m Fetched images successfully \x1b[0m', data.images)
+    } catch (error) {
+      console.error('Error fetching images:', error)
+      toast({
+        title: "Error",
+        description: "Failed to fetch images.",
+        variant: "destructive",
+      });
     }
-    fetchImages()
   }, [personId, toast])
 
-  const handleRotate = async (id: number) => {
-    const imageToRotate = images.find((img: ImageState) => img.id === id)
-    if (imageToRotate) {
-      try {
-        const rotatedImage = await rotateImage(imageToRotate.modifiedGcsObjectUrl || imageToRotate.originalGcsObjectUrl, 90)
-        
-        // Send the rotated image to the server
-        const response = await fetch('/api/upload-user-images', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            personId,
-            imageId: id,
-            modifiedImage: {
-              fileName: `${imageToRotate.uuid}_rotated.jpg`,
-              base64imgdata: rotatedImage,
-            },
-          }),
-        })
+  useEffect(() => {
+    fetchImages()
+  }, [fetchImages])
 
-        if (!response.ok) {
-          throw new Error('Failed to upload rotated image')
-        }
+  const handleRotate = useCallback((id: number) => {
+    setImages(prevImages => prevImages.map(img => 
+      img.id === id 
+        ? { ...img, localModifications: { ...img.localModifications, rotation: (img.localModifications.rotation + 90) % 360 } }
+        : img
+    ))
+  }, [])
 
-        const result = await response.json()
-
-        // Update the image in the state
-        setImages(images.map((img: ImageState) => 
-          img.id === id ? { ...img, modifiedGcsObjectUrl: result.uploadedImage.modifiedGcsObjectUrl } : img
-        ))
-
-        toast({
-          title: "Success",
-          description: "Image rotated successfully.",
-          variant: "default",
-        });
-      } catch (error) {
-        console.error('Error rotating image:', error)
-        toast({
-          title: "Error",
-          description: "Failed to rotate image.",
-          variant: "destructive",
-        });
-      }
-    }
-  }
-
-  const rotateImage = (imageSrc: string, angle: number): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const image = new Image()
-      image.crossOrigin = "anonymous"
-      image.src = imageSrc
-      image.onload = () => {
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          reject('No canvas context')
-          return
-        }
-
-        // Calculate new canvas size
-        const radians = angle * (Math.PI / 180)
-        const sin = Math.abs(Math.sin(radians))
-        const cos = Math.abs(Math.cos(radians))
-        canvas.width = image.width * cos + image.height * sin
-        canvas.height = image.width * sin + image.height * cos
-
-        // Translate and rotate
-        ctx.translate(canvas.width / 2, canvas.height / 2)
-        ctx.rotate(radians)
-        ctx.drawImage(image, -image.width / 2, -image.height / 2)
-
-        resolve(canvas.toDataURL('image/jpeg'))
-      }
-      image.onerror = () => reject('Failed to load image')
-    })
-  }
-
-  const handleCropComplete = async (crop: Crop) => {
-    if (cropImageId !== null && crop.width && crop.height) {
-      const imageToCrop = images.find(img => img.id === cropImageId)
-      if (imageToCrop) {
-        try {
-          const croppedImage = await getCroppedImg(imageToCrop.modifiedGcsObjectUrl || imageToCrop.originalGcsObjectUrl, crop)
-          
-          const response = await fetch('/api/upload-user-images', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              personId,
-              imageId: imageToCrop.id,
-              modifiedImage: {
-                fileName: `${imageToCrop.uuid}_cropped.jpg`,
-                base64imgdata: croppedImage,
-              },
-            }),
-          })
-
-          if (!response.ok) {
-            const errorData = await response.json()
-            throw new Error(errorData.error || 'Failed to upload cropped image')
-          }
-
-          const result = await response.json()
-          console.log(`\x1b[36m Cropped image ${cropImageId} uploaded successfully \x1b[0m`, result)
-
-          setImages(images.map((img: ImageState) => 
-            img.id === cropImageId ? { ...img, modifiedGcsObjectUrl: result.uploadedImage.modifiedGcsObjectUrl } : img
-          ))
-
-          toast({
-            title: "Success",
-            description: "Image cropped and uploaded successfully.",
-            variant: "default",
-          });
-        } catch (error) {
-          console.error('Error uploading cropped image:', error)
-          toast({
-            title: "Error",
-            description: "Failed to upload cropped image.",
-            variant: "destructive",
-          });
-        }
-      }
+  const handleCropComplete = useCallback((crop: Crop) => {
+    if (cropImageId !== null) {
+      setImages(prevImages => prevImages.map(img => 
+        img.id === cropImageId
+          ? { ...img, localModifications: { ...img.localModifications, crop } }
+          : img
+      ))
     }
     setCropImageId(null)
-  }
+  }, [cropImageId])
 
-  const getCroppedImg = (imageSrc: string, crop: Crop): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const image = new Image()
-      image.crossOrigin = "anonymous"
-      image.src = imageSrc
-      image.onload = () => {
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          reject('No canvas context')
-          return
-        }
+  const handleCropReset = useCallback((id: number) => {
+    setImages(prevImages => prevImages.map(img => 
+      img.id === id
+        ? { ...img, localModifications: { ...img.localModifications, crop: null } }
+        : img
+    ))
+    setCrop(undefined)
+  }, [])
 
-        // Set canvas size to the crop size
-        canvas.width = crop.width
-        canvas.height = crop.height
+  const handleDelete = useCallback((id: number) => {
+    setImages(prevImages => prevImages.filter(img => img.id !== id))
+  }, [])
 
-        ctx.drawImage(
-          image,
-          crop.x ?? 0,
-          crop.y ?? 0,
-          crop.width ?? 0,
-          crop.height ?? 0,
-          0,
-          0,
-          crop.width ?? 0,
-          crop.height ?? 0
-        )
-
-        resolve(canvas.toDataURL('image/jpeg'))
-      }
-      image.onerror = () => reject('Failed to load image')
-    })
-  }
-
-  const handleDelete = async (id: number) => {
+  const handleCreateModel = useCallback(async () => {
     try {
-      const response = await fetch(`/api/delete-user-image`, {
+      const modifiedImages = images.map(img => ({
+        id: img.id,
+        uuid: img.uuid,
+        rotation: img.localModifications.rotation,
+        crop: img.localModifications.crop,
+      }))
+
+      const response = await fetch('/api/upload-user-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personId: personId, imageId: id }),
+        body: JSON.stringify({ personId, images: modifiedImages }),
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to delete image')
+        throw new Error('Failed to update images')
       }
 
-      setImages(images.filter(img => img.id !== id))
-      toast({
-        title: "Deleted",
-        description: "Image deleted successfully.",
-        variant: "default",
-      })
-    } catch (error) {
-      console.error('Error deleting image:', error)
-      toast({
-        title: "Error",
-        description: "Failed to delete image.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const handleCreateModel = async () => {
-    try {
-      const response = await fetch(`/api/get-user-images?personId=${personId}`)
-      if (!response.ok) throw new Error('Failed to fetch images for model creation')
-      const data = await response.json()
-      
-      const processedImages = data.images.map((img: ImageState) => ({
-        id: img.id,
-        url: img.modifiedGcsObjectUrl || img.originalGcsObjectUrl,
-      }))
-      
-      console.log("Creating AI model with processed images:", processedImages)
-      // TODO: Send processedImages to the server or handle as needed
+      console.log("Images updated successfully, creating AI model")
       router.push(`/profile/${personId}/generating-model`)
     } catch (error) {
-      console.error('Error creating AI model:', error)
+      console.error('Error updating images and creating AI model:', error)
       toast({
         title: "Error",
-        description: "Failed to create AI model.",
+        description: "Failed to update images and create AI model.",
         variant: "destructive",
       })
     }
-  }
+  }, [images, personId, router, toast])
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-orange-900 to-black text-orange-50">
@@ -284,9 +141,15 @@ export default function ReviewImages({ personId }: { personId: string }) {
               {images.map((image: ImageState) => (
                 <div key={image.id} className="relative rounded-lg overflow-hidden">
                   <img
-                    src={image.modifiedGcsObjectUrl || image.originalGcsObjectUrl}
+                    src={image.signedModifiedUrl || image.signedOriginalUrl}
                     alt={`Photo ${image.id}`}
                     className="w-full h-full object-cover aspect-square"
+                    style={{
+                      transform: `rotate(${image.localModifications.rotation}deg)`,
+                      ...(image.localModifications.crop && {
+                        clipPath: `inset(${image.localModifications.crop.y}px ${image.localModifications.crop.width}px ${image.localModifications.crop.height}px ${image.localModifications.crop.x}px)`,
+                      }),
+                    }}
                   />
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent h-24 pointer-events-none"></div>
                   <div className="absolute bottom-2 left-2 right-2 flex justify-between">
@@ -301,7 +164,10 @@ export default function ReviewImages({ personId }: { personId: string }) {
                     <Dialog>
                       <DialogTrigger asChild>
                         <Button
-                          onClick={() => setCropImageId(image.id)}
+                          onClick={() => {
+                            setCropImageId(image.id)
+                            handleCropReset(image.id)
+                          }}
                           size="sm"
                           className="bg-orange-700 hover:bg-orange-600 text-white"
                         >
@@ -319,7 +185,7 @@ export default function ReviewImages({ personId }: { personId: string }) {
                           onComplete={handleCropComplete}
                         >
                           <img
-                            src={image.modifiedGcsObjectUrl || image.originalGcsObjectUrl}
+                            src={image.signedModifiedUrl || image.signedOriginalUrl}
                             alt={`Crop Photo ${image.id}`}
                           />
                         </ReactCrop>

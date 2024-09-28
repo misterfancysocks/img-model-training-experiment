@@ -69,14 +69,15 @@ export async function generateSignedUrl(
 export function parseGcsPath(urlOrPath: string): { bucketName: string; fileName: string } {
   try {
     const url = new URL(urlOrPath);
-    if (url.hostname !== 'storage.googleapis.com') {
-      throw new Error('Invalid GCS URL');
+    if (url.hostname === 'storage.googleapis.com') {
+      const [, bucketName, ...filePathParts] = url.pathname.split('/');
+      const fileName = filePathParts.join('/');
+      return { bucketName, fileName };
+    } else {
+      throw new Error('Not a valid Google Cloud Storage URL');
     }
-    const [bucketName, ...filePathParts] = url.pathname.slice(1).split('/');
-    const fileName = filePathParts.join('/');
-    return { bucketName, fileName };
-  } catch {
-    // Assume it's a "bucketName/fileName" format
+  } catch (error) {
+    // If URL parsing fails, assume it's a "bucketName/fileName" format
     const [bucketName, ...filePathParts] = urlOrPath.split('/');
     const fileName = filePathParts.join('/');
     if (!bucketName || !fileName) {
