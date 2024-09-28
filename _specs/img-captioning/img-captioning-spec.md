@@ -13,7 +13,6 @@ All images need to be captioned before the LoRA model can be trained.
 
 Arguments into caption generation will be:
 * 'imageUrl': The URL of the image to be captioned
-* 'shootId': The ID of the shoot associated with the image
 
 ## Process
 
@@ -21,7 +20,7 @@ Arguments into caption generation will be:
 2. It calls the `captionImageAction` from `@/actions/img-caption-actions`.
 3. The captioning process is performed on the server-side to ensure security and to leverage server resources.
 4. The image is fetched and downsized using the `downsizeImage` utility function from `utils/image-utils`.
-5. Person data associated with the shoot is fetched from the database.
+5. Person data
 6. The downsized image and a predefined prompt are sent to the Anthropic API for captioning.
 
 ## Outputs

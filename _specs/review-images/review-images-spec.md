@@ -1,7 +1,7 @@
 # Review Images Specification
 
 ## Overview
-The Review Images module allows users to review, crop, rotate, and manage their uploaded photos. Changes are displayed to the user in the UI and stored locally until the user decides to create their AI model. Once the user clicks "Create Your AI Model", the changes are sent to the server and applied to the images.
+The Review Images module allows users to review, crop, rotate, and manage their uploaded photos. Changes are displayed to the user in the UI and stored locally until the user decides to create their AI model. Once the user clicks "Create Your AI Model", the changes are sent to the server, applied to the images, and the image preparation pipeline is triggered.
 
 Component: `/components/review-images.tsx`
 Page: `/app/review-images/page.tsx`
@@ -91,7 +91,8 @@ CREATE TABLE IF NOT EXISTS images (
 ### Create AI Model
 - When the user clicks "Create Your AI Model":
   - Send all accumulated changes (rotations, crops, deletions) to the server.
-  - Navigate to the AI model generation page after successful update.
+  - Trigger the image preparation pipeline (`/api/img-prep-pipeline`).
+
 
 ## API Calls
 - **GET `/api/get-user-images?personId={personId}`**:
@@ -193,7 +194,8 @@ CREATE TABLE IF NOT EXISTS images (
 3. Store all modifications (crop, rotate, delete) locally.
 4. When "Create Your AI Model" is clicked, send all modifications to the server in a single request.
 5. Server processes modifications and updates images in GCS.
-6. Redirect user to AI model generation page.
+6. When confirmation received, send request to `api/img-prep-pipeline`
+
 
 ## Error Handling
 - Display error messages using toast notifications.

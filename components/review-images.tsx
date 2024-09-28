@@ -114,40 +114,70 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
           uuid: img.uuid,
         };
 
-        // Include rotation if it's not 0
+        // Only include rotation if it's not 0
         if (img.localModifications.rotation !== 0) {
           imageData.rotation = img.localModifications.rotation;
         }
 
-        // Include crop if it's not null
+        // Only include crop if it's not null
         if (img.localModifications.crop !== null) {
           imageData.crop = img.localModifications.crop;
         }
 
-        // Set deleted flag if the image is not in the current state
-        // (assuming deleted images are removed from the 'images' array)
+        // Only set deleted flag if the image is not in the current state
         if (!images.some(currentImg => currentImg.id === img.id)) {
           imageData.deleted = true;
         }
 
-        return imageData;
-      });
+        // Only return the imageData if there are modifications or it's deleted
+        return Object.keys(imageData).length > 2 ? imageData : null;
+      }).filter(Boolean); // Remove null entries
 
-      console.log('Images to be sent to server:', imagesToSend);
+      const uploadPayload = { personId, images: imagesToSend };
+      console.log('\x1b[36mPayload for /api/upload-user-images:\x1b[0m', JSON.stringify(uploadPayload, null, 2));
 
-      const response = await fetch('/api/upload-user-images', {
+      const updateResponse = await fetch('/api/upload-user-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personId, images: imagesToSend }),
+        body: JSON.stringify(uploadPayload),
       });
 
-      if (!response.ok) {
+      if (!updateResponse.ok) {
         throw new Error('Failed to update images');
       }
 
+      const updateResult = await updateResponse.json();
+      console.log('\x1b[36mResponse from /api/upload-user-images:\x1b[0m', JSON.stringify(updateResult, null, 2));
+
       console.log("Images updated successfully");
-      console.log("Creating AI model");
-      router.push(`/profile/${personId}/generating-model`);
+      console.log("Initiating AI model generation");
+
+      const pipelinePayload = { personId };
+      console.log('\x1b[36mPayload for /api/img-prep-pipeline:\x1b[0m', JSON.stringify(pipelinePayload, null, 2));
+
+      const pipelineResponse = await fetch('/api/img-prep-pipeline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pipelinePayload),
+      });
+
+      if (!pipelineResponse.ok) {
+        throw new Error('Failed to initiate AI model generation');
+      }
+
+      const pipelineResult = await pipelineResponse.json();
+      console.log('\x1b[36mResponse from /api/img-prep-pipeline:\x1b[0m', JSON.stringify(pipelineResult, null, 2));
+
+      // Instead of redirecting, update the UI to show that the process has started
+      toast({
+        title: "Success",
+        description: "AI model generation has been initiated. This process may take some time.",
+        variant: "default",
+      });
+
+      // Optionally, you can update some state here to show a loading indicator or change the UI
+      // setIsModelGenerating(true);
+
     } catch (error) {
       console.error('Error updating images and creating AI model:', error);
       toast({
@@ -156,7 +186,7 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
         variant: "destructive",
       });
     }
-  }, [images, personId, router, toast])
+  }, [images, personId, toast])
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-orange-900 to-black text-orange-50">
