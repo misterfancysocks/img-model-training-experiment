@@ -64,42 +64,26 @@ export async function POST(req: NextRequest) {
           const originalFileName = `o_${uuid}_${sanitizedFileName}`; // Prefix with 'o_'
 
           // Upload original image to GCS
-          await bucket.file(originalFileName).save(Buffer.from(image.original.split(',')[1], 'base64'), {
+          await bucket.file(originalFileName).save(Buffer.from(image.base64imgdata.split(',')[1], 'base64'), {
             metadata: {
-              contentType: image.original.split(',')[0].split(':')[1].split(';')[0],
+              contentType: image.base64imgdata.split(',')[0].split(':')[1].split(';')[0],
             },
           });
 
           // After uploading each image, construct the fully qualified URL
-          const originalUrl = `https://storage.googleapis.com/${bucketName}/${originalFileName}`;
+          const originalGcsObjectUrl = `https://storage.googleapis.com/${bucketName}/${originalFileName}`;
           
-          let croppedUrl: string | null = null;
-          if (image.cropped) {
-            if (typeof image.cropped !== 'string') {
-              throw new Error(`Invalid cropped image data for file: ${image.fileName}`);
-            }
-
-            const croppedFileName = `c_${uuid}_${sanitizedFileName}`; // Prefix with 'c_'
-
-            // Upload cropped image to GCS
-            await bucket.file(croppedFileName).save(Buffer.from(image.cropped.split(',')[1], 'base64'), {
-              metadata: {
-                contentType: image.cropped.split(',')[0].split(':')[1].split(';')[0],
-              },
-            });
-
-            // After uploading, construct croppedUrl
-            croppedUrl = `https://storage.googleapis.com/${bucketName}/${croppedFileName}`;
-          }
-
-          // Insert into images table with full URLs, setting croppedUrl to NULL as cropping is no longer handled
+          // Insert into images table with full URLs
           await db!.run(
-            'INSERT INTO images (personId, fileName, bucket, originalUrl, croppedUrl) VALUES (?, ?, ?, ?, ?)',
-            [newPersonId, originalFileName, bucketName, originalUrl, null] // Set croppedUrl to NULL
+            'INSERT INTO images (personId, fileName, bucket, originalGcsObjectUrl, modifiedGcsObjectUrl) VALUES (?, ?, ?, ?, ?)',
+            [newPersonId, originalFileName, bucketName, originalGcsObjectUrl, null]
           );
 
           return {
-            fileName: originalFileName,
+            id: (await db!.get('SELECT last_insert_rowid() as id')).id,
+            uuid,
+            sanitizedFileName,
+            originalGcsObjectUrl,
           };
         })
       );
@@ -114,7 +98,7 @@ export async function POST(req: NextRequest) {
       // Handle cropped image update
 
       // Validate payload
-      if (!personId || !imageId || !croppedImage.original) {
+      if (!personId || !imageId || !croppedImage.base64imgdata) {
         return NextResponse.json({ error: 'Invalid payload for image update' }, { status: 400 });
       }
 
@@ -140,27 +124,34 @@ export async function POST(req: NextRequest) {
       }
 
       const uuid = uuidv4();
-      const croppedFileName = `c_${uuid}_${sanitizedFileName}`;
+      const modifiedFileName = `m_${uuid}_${sanitizedFileName}`;
 
-      // Upload cropped image to GCS
-      await bucket.file(croppedFileName).save(Buffer.from(croppedImage.original.split(',')[1], 'base64'), {
+      // Upload modified image to GCS
+      await bucket.file(modifiedFileName).save(Buffer.from(croppedImage.base64imgdata.split(',')[1], 'base64'), {
         metadata: {
-          contentType: croppedImage.original.split(',')[0].split(':')[1].split(';')[0],
+          contentType: croppedImage.base64imgdata.split(',')[0].split(':')[1].split(';')[0],
         },
       });
 
-      // After uploading, construct croppedUrl
-      const croppedUrl = `https://storage.googleapis.com/${bucketName}/${croppedFileName}`;
+      // After uploading, construct modifiedGcsObjectUrl
+      const modifiedGcsObjectUrl = `https://storage.googleapis.com/${bucketName}/${modifiedFileName}`;
 
-      // Update the 'croppedUrl' with the new URL
+      // Update the 'modifiedGcsObjectUrl' with the new URL
       await db.run(
-        'UPDATE images SET croppedUrl = ? WHERE id = ? AND personId = ?',
-        [croppedUrl, imageId, personId]
+        'UPDATE images SET modifiedGcsObjectUrl = ? WHERE id = ? AND personId = ?',
+        [modifiedGcsObjectUrl, imageId, personId]
       );
 
-      console.log(`\x1b[36m Cropped image ${imageId} updated successfully \x1b[0m`);
+      console.log(`\x1b[36m Modified image ${imageId} updated successfully \x1b[0m`);
 
-      return NextResponse.json({ uploadedImage: { fileName: croppedFileName } });
+      return NextResponse.json({ 
+        uploadedImage: { 
+          id: imageId,
+          uuid,
+          sanitizedFileName,
+          modifiedGcsObjectUrl
+        } 
+      });
     } else {
       return NextResponse.json({ error: 'Invalid payload structure' }, { status: 400 });
     }

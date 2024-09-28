@@ -40,7 +40,7 @@ export async function generateSignedUrl(
   action: 'read' | 'write' = 'read',
   expiresInMs: number = 60 * 60 * 1000 // Default 1 hour
 ): Promise<string> {
-  const file = bucket.file(fileName); // Ensure 'fileName' is just the path, not a full URL
+  const file = bucket.file(fileName);
 
   const options = {
     version: 'v4' as const,

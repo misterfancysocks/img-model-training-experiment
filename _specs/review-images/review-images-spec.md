@@ -1,7 +1,7 @@
 # Review Images Specification
 
 ## Overview
-The Review Images module allows users to review, crop, rotate, and manage their uploaded photos. Changes are stored locally until the user decides to create their AI model.
+The Review Images module allows users to review, crop, rotate, and manage their uploaded photos. Changes are displayed to the user in the UI and stored locally until the user decides to create their AI model. Once the user clicks "Create Your AI Model", the changes are sent to the server and applied to the images.
 
 Component: `/components/review-images.tsx`
 Page: `/app/review-images/page.tsx`
@@ -82,9 +82,10 @@ CREATE TABLE IF NOT EXISTS images (
 ### Image Management
 - **Features**:
   - Real-time preview of changes based on local modifications.
-  - Ability to revert local changes before final submission.
-  - Always work with the modified version of an image if it exists.
-  
+  - Changes (rotations, crops) are stored locally and applied visually without sending to the server.
+  - Ability to reset crop parameters by clicking the crop button again.
+  - All changes are batched and sent to the server when the user clicks "Create Your AI Model".
+
 - **Validations**:
   - Ensure modified images meet size and format requirements.
 
@@ -164,4 +165,3 @@ CREATE TABLE IF NOT EXISTS images (
     }
     ```
 
-Note: The server applies rotations and crops to the images, saves them to GCS, and updates the database with new URLs. Rotation degrees are not stored in the database; instead, the rotated image is saved directly to GCS. When both original and modified versions exist, changes are applied to the modified version.

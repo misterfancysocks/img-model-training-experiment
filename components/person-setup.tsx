@@ -16,11 +16,11 @@ export default function PersonProfilePage({ params }: { params: { id: string } }
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [profile, setProfile] = useState({
-    firstName: "John",
-    lastName: "Doe",
-    birthdate: "1990-10-31",
-    gender: "male",
-    ethnicity: "caucasian",
+    firstName: "",
+    lastName: "",
+    birthdate: "",
+    gender: "",
+    ethnicity: "",
     costumeIdeas: ["", ""],
     photos: [] as File[]
   })
@@ -115,8 +115,7 @@ export default function PersonProfilePage({ params }: { params: { id: string } }
       const convertedPhotos = await Promise.all(
         profile.photos.map(async (file) => ({
           fileName: file.name.replace(/ /g, '_'),
-          original: await convertFileToBase64(file),
-          cropped: null, // Cropping is handled on a different page
+          base64imgdata: await convertFileToBase64(file),
         }))
       );
 
@@ -128,7 +127,7 @@ export default function PersonProfilePage({ params }: { params: { id: string } }
           gender: profile.gender,
           ethnicity: profile.ethnicity,
         },
-        images: convertedPhotos, // Changed from 'photos' to 'images'
+        images: convertedPhotos,
       };
 
       console.log('\x1b[36m person-setup.tsx handleSubmit() payload\x1b[0m', payload);
@@ -147,7 +146,6 @@ export default function PersonProfilePage({ params }: { params: { id: string } }
       const result = await response.json();
       console.log('Uploaded images:', result);
       
-      // Set the personId in localStorage
       localStorage.setItem('currentPersonId', result.personId.toString());
 
       // Navigate to the review images page

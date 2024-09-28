@@ -12,7 +12,7 @@ export default function ReviewImagesPage() {
       const storedPersonId = localStorage.getItem('currentPersonId');
       if (storedPersonId) {
         setPersonId(storedPersonId);
-        console.log('retrieved personId from local storage', storedPersonId);
+        console.log('Retrieved personId from local storage', storedPersonId);
       } else {
         console.log('No personId found in local storage, defaulting to 1');
       }

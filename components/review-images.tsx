@@ -13,8 +13,10 @@ import { useToast } from "@/hooks/use-toast"
 
 interface ImageState {
   id: number
-  originalUrl: string
-  croppedUrl: string | null
+  uuid: string
+  sanitizedFileName: string
+  originalGcsObjectUrl: string
+  modifiedGcsObjectUrl: string | null
 }
 
 export default function ReviewImages({ personId }: { personId: string }) {
@@ -30,7 +32,7 @@ export default function ReviewImages({ personId }: { personId: string }) {
         const response = await fetch(`/api/get-user-images?personId=${personId}`)
         if (!response.ok) throw new Error('Failed to fetch images')
         const data = await response.json()
-        setImages(data.images as ImageState[])
+        setImages(data.images)
         console.log('\x1b[36m Fetched images successfully \x1b[0m', data.images)
       } catch (error) {
         console.error('Error fetching images:', error)
@@ -48,10 +50,33 @@ export default function ReviewImages({ personId }: { personId: string }) {
     const imageToRotate = images.find((img: ImageState) => img.id === id)
     if (imageToRotate) {
       try {
-        const rotatedImage = await rotateImage(imageToRotate.originalUrl, 90)
+        const rotatedImage = await rotateImage(imageToRotate.modifiedGcsObjectUrl || imageToRotate.originalGcsObjectUrl, 90)
+        
+        // Send the rotated image to the server
+        const response = await fetch('/api/upload-user-images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            personId,
+            imageId: id,
+            modifiedImage: {
+              fileName: `${imageToRotate.uuid}_rotated.jpg`,
+              base64imgdata: rotatedImage,
+            },
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to upload rotated image')
+        }
+
+        const result = await response.json()
+
+        // Update the image in the state
         setImages(images.map((img: ImageState) => 
-          img.id === id ? { ...img, originalUrl: rotatedImage } : img
+          img.id === id ? { ...img, modifiedGcsObjectUrl: result.uploadedImage.modifiedGcsObjectUrl } : img
         ))
+
         toast({
           title: "Success",
           description: "Image rotated successfully.",
@@ -104,38 +129,31 @@ export default function ReviewImages({ personId }: { personId: string }) {
       const imageToCrop = images.find(img => img.id === cropImageId)
       if (imageToCrop) {
         try {
-          const croppedImage = await getCroppedImg(imageToCrop.originalUrl, crop)
+          const croppedImage = await getCroppedImg(imageToCrop.modifiedGcsObjectUrl || imageToCrop.originalGcsObjectUrl, crop)
           
-          // Prepare payload
-          const payload = {
-            personId: personId,
-            imageId: imageToCrop.id,
-            croppedImage: {
-              fileName: `${imageToCrop.id}-cropped.jpg`,
-              original: croppedImage,
-            },
-          }
-
-          console.log('\x1b[36m Sending cropped image payload: \x1b[0m', payload)
-
-          // Send cropped image to the server
-          const uploadResponse = await fetch('/api/upload-user-images', {
+          const response = await fetch('/api/upload-user-images', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+              personId,
+              imageId: imageToCrop.id,
+              modifiedImage: {
+                fileName: `${imageToCrop.uuid}_cropped.jpg`,
+                base64imgdata: croppedImage,
+              },
+            }),
           })
 
-          if (!uploadResponse.ok) {
-            const errorData = await uploadResponse.json()
+          if (!response.ok) {
+            const errorData = await response.json()
             throw new Error(errorData.error || 'Failed to upload cropped image')
           }
 
-          const result = await uploadResponse.json()
+          const result = await response.json()
           console.log(`\x1b[36m Cropped image ${cropImageId} uploaded successfully \x1b[0m`, result)
 
-          // Update local state with the new cropped URL
           setImages(images.map((img: ImageState) => 
-            img.id === cropImageId ? { ...img, croppedUrl: result.uploadedImage.croppedUrl } : img
+            img.id === cropImageId ? { ...img, modifiedGcsObjectUrl: result.uploadedImage.modifiedGcsObjectUrl } : img
           ))
 
           toast({
@@ -228,7 +246,7 @@ export default function ReviewImages({ personId }: { personId: string }) {
       
       const processedImages = data.images.map((img: ImageState) => ({
         id: img.id,
-        url: img.croppedUrl || img.originalUrl,
+        url: img.modifiedGcsObjectUrl || img.originalGcsObjectUrl,
       }))
       
       console.log("Creating AI model with processed images:", processedImages)
@@ -266,7 +284,7 @@ export default function ReviewImages({ personId }: { personId: string }) {
               {images.map((image: ImageState) => (
                 <div key={image.id} className="relative rounded-lg overflow-hidden">
                   <img
-                    src={image.originalUrl}
+                    src={image.modifiedGcsObjectUrl || image.originalGcsObjectUrl}
                     alt={`Photo ${image.id}`}
                     className="w-full h-full object-cover aspect-square"
                   />
@@ -301,7 +319,7 @@ export default function ReviewImages({ personId }: { personId: string }) {
                           onComplete={handleCropComplete}
                         >
                           <img
-                            src={image.croppedUrl || image.originalUrl}
+                            src={image.modifiedGcsObjectUrl || image.originalGcsObjectUrl}
                             alt={`Crop Photo ${image.id}`}
                           />
                         </ReactCrop>
