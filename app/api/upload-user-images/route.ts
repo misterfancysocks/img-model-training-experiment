@@ -17,7 +17,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const { personData, images, personId } = await req.json();
-    console.log('\x1b[36m Payload received: \x1b[0m', JSON.stringify({ personData, images, personId }, null, 2));
+    
+    // Truncate base64 data for logging
+    const truncatedImages = images?.map((img: any) => ({
+      ...img,
+      base64imgdata: img.base64imgdata ? `${img.base64imgdata.substring(0, 50)}...` : undefined
+    }));
+    
+    console.log('\x1b[36m Payload received: \x1b[0m', JSON.stringify({ 
+      personData, 
+      images: truncatedImages, 
+      personId 
+    }, null, 2));
 
     // Determine if it's an initial upload or an update
     if (personData && images) {

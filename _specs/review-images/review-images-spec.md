@@ -204,3 +204,91 @@ CREATE TABLE IF NOT EXISTS images (
 ## Performance Considerations
 - Use efficient image manipulation libraries for client-side previews.
 - Implement lazy loading for images in the review grid.
+
+## Cropping Implementation
+
+The cropping functionality in the ReviewImages component is implemented using the `react-image-crop` library. Here's a detailed breakdown of the implementation:
+
+1. **Crop State**:
+   - `cropImageId`: Stores the ID of the image being cropped.
+   - `activeCrop`: Stores the current crop state (of type `Crop` from react-image-crop).
+
+2. **Cropping Interface**:
+   - Displayed in a dialog using the `Dialog` component from shadcn/ui.
+   - Uses the `ReactCrop` component from react-image-crop.
+
+3. **ReactCrop Configuration**:
+   ```typescript
+   <ReactCrop
+     crop={activeCrop}
+     onChange={handleCropChange}
+     onComplete={handleCropComplete}
+   >
+     <img src={imageUrl} alt={`Crop Photo ${cropImageId}`} />
+   </ReactCrop>
+   ```
+
+4. **Crop Change Handling**:
+   - `handleCropChange` function updates the `activeCrop` state as the user adjusts the crop area.
+   ```typescript
+   const handleCropChange = useCallback((crop: Crop, percentCrop: PercentCrop) => {
+     setActiveCrop(crop);
+   }, []);
+   ```
+
+5. **Crop Completion Handling**:
+   - `handleCropComplete` function is called when the user finishes cropping.
+   - It rounds the crop values to integers and updates the `images` state with the new crop information.
+   ```typescript
+   const handleCropComplete = useCallback((crop: Crop, percentCrop: PercentCrop) => {
+     if (cropImageId !== null) {
+       const validatedCrop: Crop = {
+         x: Math.round(crop.x),
+         y: Math.round(crop.y),
+         width: Math.round(crop.width),
+         height: Math.round(crop.height),
+         unit: crop.unit,
+       };
+
+       setImages(prevImages => prevImages.map(img => 
+         img.id === cropImageId
+           ? { ...img, localModifications: { ...img.localModifications, crop: validatedCrop }, crop: validatedCrop }
+           : img
+       ));
+     }
+   }, [cropImageId]);
+   ```
+
+6. **Visual Application of Crop**:
+   - The crop is applied visually to the image in the gallery using CSS transforms.
+   ```typescript
+   <img
+     src={imageUrl}
+     alt={`Photo ${image.id}`}
+     style={{
+       transform: `rotate(${rotation}deg) translate(-${cropX}px, -${cropY}px)`,
+       width: `${imageWidth}px`,
+       height: `${imageHeight}px`,
+     }}
+   />
+   ```
+
+7. **Crop Data Storage**:
+   - Crop information is stored locally in the `images` state array.
+   - Each image object in the array has a `localModifications` property that includes the crop data.
+   - The crop data is only sent to the server when the user clicks "Create Your AI Model".
+
+8. **Crop Reset**:
+   - To reset the crop, implement a `handleCropReset` function:
+   ```typescript
+   const handleCropReset = useCallback((id: number) => {
+     setImages(prevImages => prevImages.map(img => 
+       img.id === id
+         ? { ...img, localModifications: { ...img.localModifications, crop: null } }
+         : img
+     ));
+     setActiveCrop(undefined);
+   }, []);
+   ```
+
+This implementation allows for free-form cropping without aspect ratio restrictions, with all modifications stored locally until the user decides to create their AI model.

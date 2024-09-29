@@ -64,6 +64,9 @@ const Header = () => {
         <Link href="/" className={`hover:text-orange-300 ${pathname === '/' ? 'font-bold text-orange-200' : ''}`}>
           Home
         </Link>
+        <Link href="/pricing" className={`hover:text-orange-300 ${pathname === '/pricing' ? 'font-bold text-orange-200' : ''}`}>
+          Pricing
+        </Link>
         <Link href="/person-setup" className={`hover:text-orange-300 ${pathname === '/person-setup' ? 'font-bold text-orange-200' : ''}`}>
           Person Setup
         </Link>
