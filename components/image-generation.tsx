@@ -59,7 +59,7 @@ export function ImageGeneration() {
   const [selectedLora, setSelectedLora] = useState<LoraModel | null>(null);
   const [prompt, setPrompt] = useState<string>("");
   const [numImages, setNumImages] = useState<number>(1);
-  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
+  //const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [userGeneratedImages, setUserGeneratedImages] = useState<UserGeneratedImage[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -291,11 +291,12 @@ export function ImageGeneration() {
               >
                 <Card className="overflow-hidden bg-orange-800 border-orange-800">
                   <CardContent className="p-0">
-                    <img 
+                    <img
                       src={image.signedUrl || image.fullUrl} 
                       alt={`Generated image`} 
                       className="w-full h-auto" 
                       loading="lazy"
+
                     />
                   </CardContent>
                 </Card>
