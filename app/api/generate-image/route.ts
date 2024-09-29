@@ -22,7 +22,6 @@ const storage = new Storage({
 
 const loraBucketName = process.env.GCP_LORA_FILES_BUCKET_NAME as string;
 const generatedImagesBucketName = process.env.GCP_USER_IMG_GENERATED_BUCKET_NAME as string;
-const gcsDomain = "https://storage.googleapis.com";
 
 interface GenerateImageRequest {
   loraId: number;

@@ -69,36 +69,36 @@ export async function GET(request: NextRequest) {
     console.log('Fetched images:', images);
 
     // Generate signed URLs for original and cropped images
-    for (let image of images) {
-      image.signedOriginalUrl = await generateSignedUrl(image.originalUrl);
-      if (image.croppedUrl) {
-        image.signedCroppedUrl = await generateSignedUrl(image.croppedUrl);
-      }
-    }
+    const imagesWithSignedUrls = await Promise.all(images.map(async (image) => ({
+      ...image,
+      signedOriginalUrl: await generateSignedUrl(image.originalUrl),
+      signedCroppedUrl: image.croppedUrl ? await generateSignedUrl(image.croppedUrl) : null,
+    })));
 
     // Fetch preprocessed_images related to the fetched images
     const imageIds = images.map(img => img.id);
     let preprocessedImages: PreprocessedImageData[] = [];
     if (imageIds.length > 0) {
-      preprocessedImages = await db.all(
+      const fetchedPreprocessedImages = await db.all(
         `SELECT id, imageId, preprocessedUrl, caption, llm FROM preprocessed_images WHERE imageId IN (${imageIds.map(() => '?').join(',')})`,
         imageIds
       );
 
-      console.log('Fetched preprocessed images:', preprocessedImages);
+      console.log('Fetched preprocessed images:', fetchedPreprocessedImages);
 
       // Generate signed URLs for preprocessed images
-      for (let image of preprocessedImages) {
-        image.signedUrl = await generateSignedUrl(image.preprocessedUrl);
-      }
+      preprocessedImages = await Promise.all(fetchedPreprocessedImages.map(async (preprocessedImage) => ({
+        ...preprocessedImage,
+        signedUrl: await generateSignedUrl(preprocessedImage.preprocessedUrl),
+      })));
     } else {
       console.log('No images found for personId:', personId);
     }
 
-    console.log('Final images with signed URLs:', images);
+    console.log('Final images with signed URLs:', imagesWithSignedUrls);
     console.log('Final preprocessed images with signed URLs:', preprocessedImages);
 
-    return new Response(JSON.stringify({ images, preprocessedImages }), { status: 200 });
+    return new Response(JSON.stringify({ images: imagesWithSignedUrls, preprocessedImages }), { status: 200 });
   } catch (error) {
     console.error('Error fetching person details:', error);
     return new Response(JSON.stringify({ message: 'Failed to fetch person details' }), { status: 500 });

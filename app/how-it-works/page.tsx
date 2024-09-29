@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Accordion,
   AccordionContent,
@@ -21,7 +21,7 @@ export default function HowItWorksPage() {
         <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col justify-center items-center text-center p-4">
           <h1 className="text-4xl md:text-5xl font-bold mb-4 text-orange-100">Unleash the Magic: Transform Yourself with Our Spooky Technology!</h1>
           <p className="text-xl max-w-2xl text-orange-50">
-            Ever wondered how you'd look as a witch, vampire, or ghost? Our cutting-edge AI crafts realistic Halloween images of you or your children, bringing your costume dreams to life!
+            Ever wondered how you&apos;d look as a witch, vampire, or ghost? Our cutting-edge AI crafts realistic Halloween images of you or your children, bringing your costume dreams to life!
           </p>
         </div>
       </header>

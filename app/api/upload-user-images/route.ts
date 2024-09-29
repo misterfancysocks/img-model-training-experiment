@@ -7,6 +7,32 @@ import sanitize from 'sanitize-filename';
 import { getBucket, uploadFile, generateSignedUrl } from '@/utils/gcs';
 import sharp from 'sharp'; // Add this import at the top
 
+// Add these interfaces at the top of the file
+interface PersonData {
+  firstName: string;
+  lastName: string;
+  ethnicity: string;
+  gender: string;
+  birthdate: string;
+}
+
+interface ImageData {
+  fileName: string;
+  base64imgdata: string;
+}
+
+interface ImageModification {
+  id: number;
+  rotation: number;
+  crop?: {
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+  };
+  deleted?: boolean;
+}
+
 const bucketName = process.env.GCP_USER_IMG_UPLOAD_BUCKET_NAME || '';
 const bucket = getBucket(bucketName);
 
@@ -16,12 +42,16 @@ export async function POST(req: NextRequest) {
   let db: MyDatabase | null = null;
 
   try {
-    const { personData, images, personId } = await req.json();
+    const { personData, images, personId } = await req.json() as {
+      personData?: PersonData;
+      images?: ImageData[] | ImageModification[];
+      personId?: number;
+    };
     
     // Truncate base64 data for logging
-    const truncatedImages = images?.map((img: any) => ({
+    const truncatedImages = images?.map((img) => ({
       ...img,
-      base64imgdata: img.base64imgdata ? `${img.base64imgdata.substring(0, 50)}...` : undefined
+      base64imgdata: 'base64imgdata' in img ? `${img.base64imgdata.substring(0, 50)}...` : undefined
     }));
     
     console.log('\x1b[36m Payload received: \x1b[0m', JSON.stringify({ 
@@ -33,7 +63,7 @@ export async function POST(req: NextRequest) {
     // Determine if it's an initial upload or an update
     if (personData && images) {
       // Handle initial upload
-      if (!personData || !images || !Array.isArray(images)) {
+      if (!Array.isArray(images)) {
         return NextResponse.json({ error: 'Invalid payload structure' }, { status: 400 });
       }
 
@@ -47,7 +77,7 @@ export async function POST(req: NextRequest) {
       const newPersonId = result.lastID;
 
       const uploadedImages = await Promise.all(
-        images.map(async (image: any) => {
+        (images as ImageData[]).map(async (image) => {
           if (!image.fileName) {
             throw new Error('Image fileName is required');
           }
@@ -91,7 +121,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ personId: newPersonId, uploadedImages });
     } else if (personId && images) {
       // Handle image modifications
-      if (!personId || !Array.isArray(images)) {
+      if (!Array.isArray(images)) {
         return NextResponse.json({ error: 'Invalid payload for image update' }, { status: 400 });
       }
 
@@ -99,7 +129,7 @@ export async function POST(req: NextRequest) {
       await db.run('BEGIN TRANSACTION');
 
       const updatedImages = await Promise.all(
-        images.map(async (image: any) => {
+        (images as ImageModification[]).map(async (image) => {
           console.log(`\x1b[36m Processing image modification for image ID: ${image.id} \x1b[0m`);
 
           const existingImage = await db!.get(
