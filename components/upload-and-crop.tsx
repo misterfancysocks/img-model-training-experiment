@@ -36,7 +36,6 @@ export const UploadAndCrop: React.FC = () => {
     birthdate: '',
   });
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [crop, setCrop] = useState<Crop>();
   const imgRef = useRef<HTMLImageElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentCropIndex, setCurrentCropIndex] = useState<number | null>(null);
@@ -118,17 +117,10 @@ export const UploadAndCrop: React.FC = () => {
           )
         );
         setCurrentCropIndex(null);
-        setCrop(undefined);
         setTempCrop(undefined);
       }
     }
   }, [currentCropIndex]);
-
-  const handleRevert = (index: number) => {
-    setImages(prev => prev.map((img, i) => 
-      i === index ? { original: img.original, fileName: img.fileName } : img
-    ));
-  }
 
   const isFormValid = () => {
     return (
