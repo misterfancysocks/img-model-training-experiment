@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { Button } from "@/components/ui/button"
@@ -9,10 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Ghost, Upload, ArrowRight, X, Plus, Minus } from 'lucide-react'
+import { Ghost, ArrowRight, X, Plus, Minus } from 'lucide-react'
 import { useToast } from "@/hooks/use-toast"
 
-export default function PersonProfilePage({ params }: { params: { id: string } }) {
+export default function PersonProfilePage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [profile, setProfile] = useState({
@@ -26,6 +26,14 @@ export default function PersonProfilePage({ params }: { params: { id: string } }
   })
   const [dragActive, setDragActive] = useState(false)
   const { toast } = useToast()
+  const [userId, setUserId] = useState<number | null>(null)
+
+  useEffect(() => {
+    const storedUserId = localStorage.getItem('selectedUserId')
+    if (storedUserId) {
+      setUserId(parseInt(storedUserId, 10))
+    }
+  }, [])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setProfile({ ...profile, [e.target.name]: e.target.value })
@@ -110,6 +118,15 @@ export default function PersonProfilePage({ params }: { params: { id: string } }
       return;
     }
 
+    if (!userId) {
+      toast({
+        title: "Error",
+        description: "No user selected. Please select a user from the header.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       // Convert photos to Base64
       const convertedPhotos = await Promise.all(
@@ -121,12 +138,14 @@ export default function PersonProfilePage({ params }: { params: { id: string } }
 
       const payload = {
         personData: {
+          userId: userId,
           firstName: profile.firstName,
           lastName: profile.lastName,
           birthdate: profile.birthdate,
           gender: profile.gender,
           ethnicity: profile.ethnicity,
         },
+        costumeIdeas: profile.costumeIdeas.filter(idea => idea.trim() !== ""),
         images: convertedPhotos,
       };
 

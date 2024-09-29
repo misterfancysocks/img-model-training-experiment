@@ -6,8 +6,8 @@ import { openDb } from '@/db/db';
 const storage = new Storage({
   projectId: process.env.GCP_PROJECT_ID,
   credentials: {
-    client_email: process.env.GCP_CLIENT_EMAIL!,
-    private_key: process.env.GCP_PRIVATE_KEY?.replace(/\\n/g, '\n')!,
+    client_email: process.env.GCP_CLIENT_EMAIL,
+    private_key: process.env.GCP_PRIVATE_KEY ? process.env.GCP_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
   },
 });
 
@@ -40,16 +40,16 @@ export async function GET(request: Request) {
   try {
     const db = await openDb();
 
-    const loraModels = await db.all(`
-      SELECT l.id, l.personId, p.firstName, p.lastName, p.trigger
+    const loraModels = await db.all<LoraModel[]>(`
+      SELECT l.id, l.personId, p.firstName, p.lastName, p.trigger, l.url
       FROM loras l
       JOIN persons p ON l.personId = p.id
       WHERE p.userId = ?
     `, userId);
 
     // Process each LoRA model to generate a signed URL
-    const loraDetailsPromises = loraModels.map(async (model: any) => {
-      let { url } = model; // Original URL from the database
+    const loraDetailsPromises = loraModels.map(async (model: LoraModel) => {
+      const { url } = model; // Original URL from the database
       let signedUrl: string;
       let bucketName = defaultBucketName;
       let filePath = url;
@@ -60,8 +60,9 @@ export async function GET(request: Request) {
         if (url.startsWith('gs://')) {
           // Handle gs:// URLs
           const gsPath = url.slice(5);
-          [bucketName, ...filePath] = gsPath.split('/');
-          filePath = filePath.join('/');
+          const parts = gsPath.split('/');
+          bucketName = parts[0];
+          filePath = parts.slice(1).join('/');
         } else if (url.startsWith('http://') || url.startsWith('https://')) {
           // Handle full HTTP(S) URLs
           const urlObj = new URL(url);
@@ -86,8 +87,8 @@ export async function GET(request: Request) {
         });
 
         console.log('\x1b[36mGenerated signed URL:\x1b[0m', signedUrl);
-      } catch (error: any) {
-        console.error('\x1b[31mError generating signed URL for model:', model.id, '-', error.message, '\x1b[0m');
+      } catch (error) {
+        console.error('\x1b[31mError generating signed URL for model:', model.id, '-', error instanceof Error ? error.message : String(error), '\x1b[0m');
         // Fallback to the original URL if signing fails
         signedUrl = url;
       }
@@ -104,9 +105,19 @@ export async function GET(request: Request) {
 
     // Return the list of LoRA models with signed URLs as a JSON response
     return NextResponse.json(loraDetails);
-  } catch (error: any) {
-    console.error('\x1b[31mError fetching LoRA models:', error.message, '\x1b[0m');
+  } catch (error) {
+    console.error('\x1b[31mError fetching LoRA models:', error instanceof Error ? error.message : String(error), '\x1b[0m');
     // Return a 500 error if fetching models fails
     return NextResponse.json({ error: 'Failed to fetch LoRA models' }, { status: 500 });
   }
 }
+
+// Add this type definition at the end of the file
+type LoraModel = {
+  id: number;
+  personId: number;
+  firstName: string;
+  lastName: string;
+  trigger: string;
+  url: string;
+};

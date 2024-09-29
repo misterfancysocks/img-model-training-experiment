@@ -59,9 +59,7 @@ export function ImageGeneration() {
   const [selectedLora, setSelectedLora] = useState<LoraModel | null>(null);
   const [prompt, setPrompt] = useState<string>("");
   const [numImages, setNumImages] = useState<number>(1);
-  //const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [userGeneratedImages, setUserGeneratedImages] = useState<UserGeneratedImage[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const { toast } = useToast()
   const [page, setPage] = useState(1)
@@ -124,13 +122,13 @@ export function ImageGeneration() {
         console.log('User ID changed:', newUserId);
         setSelectedUserId(newUserId);
         if (newUserId) {
-          setUserGeneratedImages([]);
+          setAllImages([]);
           setPage(1);
           setHasMore(true);
           fetchUserGeneratedImages(newUserId, 1);
         } else {
           console.log('Clearing user generated images due to null user ID');
-          setUserGeneratedImages([]);
+          setAllImages([]);
         }
       }
     };

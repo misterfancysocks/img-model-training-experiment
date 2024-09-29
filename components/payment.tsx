@@ -1,45 +1,31 @@
 "use client"
 
 import { useState } from 'react'
-import { useStripe, useElements, CardElement } from '@stripe/react-stripe-js'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Icons } from "@/components/ui/icons"
+import { useToast } from "@/hooks/use-toast"
+
 export default function PaymentPage() {
-  const stripe = useStripe()
-  const elements = useElements()
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const { toast } = useToast()
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setLoading(true)
-    setError(null)
 
-    if (!stripe || !elements) {
+    // Simulate payment processing
+    setTimeout(() => {
       setLoading(false)
-      return
-    }
-
-    const { error: stripeError, paymentMethod } = await stripe.createPaymentMethod({
-      type: 'card',
-      card: elements.getElement(CardElement),
-    })
-
-    if (stripeError) {
-      setError(stripeError.message)
-      setLoading(false)
-      return
-    }
-
-    // Here you would typically send the paymentMethod.id to your server
-    // to complete the payment. For this example, we'll just simulate success.
-    console.log('Payment successful:', paymentMethod)
-    setLoading(false)
-    // Redirect to a success page or show a success message
+      toast({
+        title: "Payment Successful",
+        description: "Your order has been processed.",
+        duration: 5000,
+      })
+    }, 2000)
   }
 
   return (
@@ -48,7 +34,7 @@ export default function PaymentPage() {
         <Card className="max-w-2xl mx-auto bg-black/80 backdrop-blur-md border-orange-500 shadow-xl">
           <CardHeader>
             <CardTitle className="text-2xl text-orange-300">Complete Your Purchase</CardTitle>
-            <CardDescription className="text-orange-200">Secure payment via Stripe</CardDescription>
+            <CardDescription className="text-orange-200">Secure payment processing</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
@@ -77,19 +63,18 @@ export default function PaymentPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="card-element" className="text-orange-200">Card Details</Label>
-                  <div className="bg-orange-900/30 border border-orange-700 rounded-md p-3">
-                    <CardElement options={{
-                      style: {
-                        base: {
-                          fontSize: '16px',
-                          color: '#fff',
-                          '::placeholder': {
-                            color: '#ffa500',
-                          },
-                        },
-                      },
-                    }} />
+                  <Label htmlFor="card-number" className="text-orange-200">Card Number</Label>
+                  <Input id="card-number" placeholder="1234 5678 9012 3456" required className="bg-orange-900/30 border-orange-700 text-orange-100" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="expiry" className="text-orange-200">Expiry Date</Label>
+                    <Input id="expiry" placeholder="MM/YY" required className="bg-orange-900/30 border-orange-700 text-orange-100" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cvc" className="text-orange-200">CVC</Label>
+                    <Input id="cvc" placeholder="123" required className="bg-orange-900/30 border-orange-700 text-orange-100" />
                   </div>
                 </div>
 
@@ -99,8 +84,6 @@ export default function PaymentPage() {
                     I agree to the <a href="#" className="text-orange-400 hover:underline">Terms of Service</a> and <a href="#" className="text-orange-400 hover:underline">Privacy Policy</a>
                   </Label>
                 </div>
-
-                {error && <p className="text-red-500">{error}</p>}
 
                 <Button type="submit" disabled={loading} className="w-full bg-orange-600 hover:bg-orange-500 text-orange-100">
                   {loading ? (
@@ -116,7 +99,7 @@ export default function PaymentPage() {
             </div>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <p className="text-xs text-orange-300">Your payment is securely processed by Stripe. We do not store your card details.</p>
+            <p className="text-xs text-orange-300">Your payment is securely processed. We do not store your card details.</p>
           </CardFooter>
         </Card>
       </main>

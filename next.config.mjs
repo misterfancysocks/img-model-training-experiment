@@ -9,6 +9,13 @@ const nextConfig = {
     return config;
   },
   images: {
+    unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.googleapis.com',
+      },
+    ],
     domains: ['storage.googleapis.com'],
   },
 };

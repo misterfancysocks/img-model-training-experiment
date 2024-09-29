@@ -7,12 +7,12 @@ This component also executes the img-captioning defined in [img-captioning-spec]
 ## User Interface
 - A menu on the left side allows the user to select a shoot.
 - Images are loaded on the right side in a grid layout.
-- If a cropped image exists (prefix of 'c_' in the filename), it will be displayed; otherwise, the original (prefix of 'o_') will be shown.
+- If a modified image exists (prefix of 'm_' in the filename), it will be displayed; otherwise, the original (prefix of 'o_') will be shown.
 - If a preprocessed image exists (prefix of 'nobg_' in the filename), it will be displayed; otherwise, the original (prefix of 'o_') will be shown.
 
 ### Hierarchy to Check for Photos (in order):
 1. **preprocessed** / 'nobg_'
-2. **cropped** / 'c_'
+2. **modified** / 'm_'
 3. **original** / 'o_'
 
 ### Shoot Selection
@@ -81,7 +81,7 @@ This component also executes the img-captioning defined in [img-captioning-spec]
 - **Storage:**
   - Processed images are saved in the GCP bucket with the 'nobg_' prefix.
 - **Display Logic:**
-  - UI checks for the existence of preprocessed images first, followed by cropped and original images.
+  - UI checks for the existence of preprocessed images first, followed by modified and original images.
 
 ## Save Functionality
 - **"Save" Button:**

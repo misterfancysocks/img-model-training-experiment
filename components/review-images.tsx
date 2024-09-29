@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import ReactCrop, { Crop, PercentCrop } from 'react-image-crop';
+import ReactCrop, { Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,7 +48,7 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
       const data = await response.json();
 
       const fetchedImages: ImageState[] = await Promise.all(
-        data.images.map(async (img: any) => {
+        data.images.map(async (img: ImageState) => {
           const image = new Image();
           image.src = img.signedOriginalUrl;
           await new Promise((resolve, reject) => {
@@ -93,7 +93,7 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
     }));
   }, []);
 
-  const handleCropComplete = useCallback((crop: Crop, percentCrop: PercentCrop) => {
+  const handleCropComplete = useCallback((crop: Crop) => {
     if (cropImageId !== null) {
       const validatedCrop: Crop = {
         x: Math.round(crop.x),
@@ -105,7 +105,7 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
 
       console.log(`Client-side crop data for image ${cropImageId}:`, {
         original: crop,
-        percent: percentCrop,
+        //percent: percentCrop,
         validated: validatedCrop,
       });
 
@@ -117,17 +117,8 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
     }
   }, [cropImageId]);
 
-  const handleCropChange = useCallback((crop: Crop, percentCrop: PercentCrop) => {
+  const handleCropChange = useCallback((crop: Crop) => {
     setActiveCrop(crop);
-  }, []);
-
-  const handleCropReset = useCallback((id: number) => {
-    setImages(prevImages => prevImages.map(img => 
-      img.id === id
-        ? { ...img, localModifications: { ...img.localModifications, crop: null } }
-        : img
-    ));
-    setActiveCrop(undefined);
   }, []);
 
   const handleDelete = useCallback((id: number) => {
@@ -198,9 +189,14 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
 
       toast({
         title: "Success",
-        description: "AI model generation has been initiated. This process may take some time.",
+        description: "AI model generation has been initiated. Redirecting to generation page...",
         variant: "default",
       });
+
+      // Wait for a short delay to allow the toast to be shown
+      setTimeout(() => {
+        router.push('/placeholder');
+      }, 2000);
 
     } catch (error) {
       console.error('Error updating images and creating AI model:', error);
@@ -210,7 +206,7 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
         variant: "destructive",
       });
     }
-  }, [images, personId, toast]);
+  }, [images, personId, toast, router]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-orange-900 to-black text-orange-50">
@@ -320,7 +316,7 @@ export default function ReviewImages({ personId }: { personId: string | null }) 
 
         <div className="text-center space-y-4">
           <p className="text-orange-200 text-sm max-w-md mx-auto">
-            Next, we'll process your photos and create a personalized AI model for generating your Halloween costumes.
+            Next, we&apos;ll process your photos and create a personalized AI model for generating your Halloween costumes.
           </p>
           <Button 
             onClick={handleCreateModel}
