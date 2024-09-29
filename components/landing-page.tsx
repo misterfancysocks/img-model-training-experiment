@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Ghost, Upload, Wand2 } from "lucide-react";
 import Image from "next/image";
 import { TryItNowButton } from "@/components/try-it-now-button";
+import Link from "next/link";
 
 export function LandingPage() {
   return (
@@ -39,8 +40,9 @@ function HeroSection() {
         <Button 
           variant="secondary" 
           className="w-full sm:w-auto border border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-white"
+          asChild
         >
-          Learn More
+          <Link href="/how-it-works">How it works</Link>
         </Button>
       </div>
       <div className="pt-4 grid gap-4 sm:grid-cols-3">
